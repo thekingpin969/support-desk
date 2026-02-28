@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  client
+  employee
+  admin
+}
+
+enum Priority {
+  low
+  medium
+  high
+  critical
+}
+
+enum TicketStatus {
+  open
+  assigned
+  in_progress
+  pending_review
+  revision_requested
+  resolved
+  closed
+  reopened
+  escalated
+  reassigned
+}
+
+enum ImageContext {
+  ticket
+  response
+}
+
+enum ResponseStatus {
+  draft
+  pending_review
+  approved
+  rejected
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique @db.VarChar(255)
+  password_hash String    @db.VarChar(255)
+  role          Role
+  full_name     String    @db.VarChar(100)
+  phone         String?   @db.VarChar(20)
+  is_active     Boolean   @default(true)
+  fcm_token              String?   @db.Text
+  password_reset_token   String?   @db.VarChar(255)
+  password_reset_expires DateTime? @db.Timestamptz
+  created_at             DateTime  @default(now()) @db.Timestamptz
+  updated_at             DateTime  @default(now()) @updatedAt @db.Timestamptz
+
+  employee_profile EmployeeProfile?
+  tickets_created  Ticket[]        @relation("ClientTickets")
+  tickets_assigned Ticket[]        @relation("AssignedTickets")
+  images_uploaded  TicketImage[]
+  ticket_responses TicketResponse[] @relation("ResponseAuthor")
+  reviews_given    TicketResponse[] @relation("ResponseReviewer")
+  notifications    Notification[]
+  refresh_tokens   RefreshToken[]
+}
+
+model EmployeeProfile {
+  id                 String    @id @default(uuid()) @db.Uuid
+  user_id            String    @unique @db.Uuid
+  user               User      @relation(fields: [user_id], references: [id])
+  department         String?   @db.VarChar(100)
+  max_capacity       Int       @default(10)
+  open_ticket_count  Int       @default(0)
+  last_assigned_at   DateTime? @db.Timestamptz
+}
+
+model Category {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(100)
+  is_active Boolean  @default(true)
+  tickets   Ticket[]
+}
+
+model Ticket {
+  id                    String    @id @default(uuid()) @db.Uuid
+  ticket_number         String    @unique @db.VarChar(20)
+  client_id             String    @db.Uuid
+  client                User      @relation("ClientTickets", fields: [client_id], references: [id])
+  assigned_employee_id  String?   @db.Uuid
+  assigned_employee     User?     @relation("AssignedTickets", fields: [assigned_employee_id], references: [id])
+  category_id           String    @db.Uuid
+  category              Category  @relation(fields: [category_id], references: [id])
+  priority              Priority
+  status                TicketStatus
+  title                 String    @db.VarChar(255)
+  description           String    @db.Text
+  sla_deadline          DateTime? @db.Timestamptz
+  sla_warning_sent_at   DateTime? @db.Timestamptz
+  escalated_at          DateTime? @db.Timestamptz
+  resolved_at           DateTime? @db.Timestamptz
+  closed_at             DateTime? @db.Timestamptz
+  rating                Int?      @db.SmallInt
+  rating_comment        String?   @db.Text
+  reopen_count          Int       @default(0) @db.SmallInt
+  created_at            DateTime  @default(now()) @db.Timestamptz
+  updated_at            DateTime  @default(now()) @updatedAt @db.Timestamptz
+
+  images                TicketImage[]
+  responses             TicketResponse[]
+  audit_logs            TicketAuditLog[]
+}
+
+model TicketImage {
+  id               String       @id @default(uuid()) @db.Uuid
+  ticket_id        String       @db.Uuid
+  ticket           Ticket       @relation(fields: [ticket_id], references: [id])
+  imgbb_url        String       @db.Text
+  imgbb_delete_url String?      @db.Text
+  uploaded_by      String       @db.Uuid
+  uploader         User         @relation(fields: [uploaded_by], references: [id])
+  context          ImageContext
+  created_at       DateTime     @default(now()) @db.Timestamptz
+}
+
+model TicketResponse {
+  id             String         @id @default(uuid()) @db.Uuid
+  ticket_id      String         @db.Uuid
+  ticket         Ticket         @relation(fields: [ticket_id], references: [id])
+  employee_id    String         @db.Uuid
+  employee       User           @relation("ResponseAuthor", fields: [employee_id], references: [id])
+  response_text  String         @db.Text
+  status         ResponseStatus
+  admin_feedback String?        @db.Text
+  reviewed_by    String?        @db.Uuid
+  reviewer       User?          @relation("ResponseReviewer", fields: [reviewed_by], references: [id])
+  submitted_at   DateTime?      @db.Timestamptz
+  reviewed_at    DateTime?      @db.Timestamptz
+  created_at     DateTime       @default(now()) @db.Timestamptz
+}
+
+model SlaConfig {
+  id             String   @id @default(uuid()) @db.Uuid
+  priority       Priority @unique
+  response_hours Int
+  warning_hours  Int
+}
+
+model TicketAuditLog {
+  id          String       @id @default(uuid()) @db.Uuid
+  ticket_id   String       @db.Uuid
+  ticket      Ticket       @relation(fields: [ticket_id], references: [id])
+  from_status TicketStatus?
+  to_status   TicketStatus
+  actor_id    String       @db.Uuid
+  changed_at  DateTime     @default(now()) @db.Timestamptz
+  note        String?      @db.Text
+}
+
+model Notification {
+  id           String   @id @default(uuid()) @db.Uuid
+  user_id      String   @db.Uuid
+  user         User     @relation(fields: [user_id], references: [id])
+  type         String   @db.VarChar(50)
+  message      String   @db.Text
+  payload_json String?  @db.Text
+  is_read      Boolean  @default(false)
+  created_at   DateTime @default(now()) @db.Timestamptz
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  user       User     @relation(fields: [user_id], references: [id])
+  token_hash String   @db.VarChar(255)
+  expires_at DateTime @db.Timestamptz
+  is_revoked Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz
+}
