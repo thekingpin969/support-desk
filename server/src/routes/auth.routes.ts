@@ -3,8 +3,8 @@ import { registerClient, login, refresh, logout, forgotPassword, resetPassword }
 
 const router = Router();
 
-router.post('/register', registerClient);
-router.post('/login', login);
+router.post('/:role/register', registerClient);
+router.post('/:role/login', login);
 router.post('/refresh', refresh);
 router.post('/logout', logout);
 router.post('/forgot-password', forgotPassword);

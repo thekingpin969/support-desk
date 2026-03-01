@@ -25,8 +25,16 @@ const loginSchema = z.object({
 
 export const registerClient = async (req: Request, res: Response): Promise<void> => {
     try {
+        const { role } = req.params;
+        if (!['client', 'employee', 'admin'].includes(role)) {
+            res.status(400).json({ error: { code: 'INVALID_ROLE', message: 'Invalid role parameter' } });
+            return;
+        }
+
         const data = registerSchema.parse(req.body);
-        const existingUser = await prisma.user.findUnique({ where: { email: data.email } });
+        const existingUser = await prisma.user.findUnique({
+            where: { email_role: { email: data.email, role: role as any } }
+        });
 
         if (existingUser) {
             res.status(400).json({ error: { code: 'EMAIL_IN_USE', message: 'Email already exists' } });
@@ -35,14 +43,26 @@ export const registerClient = async (req: Request, res: Response): Promise<void>
 
         const password_hash = await bcrypt.hash(data.password, 12);
 
+        // Define user creation data
+        const userData: any = {
+            email: data.email,
+            password_hash,
+            role: role as any,
+            full_name: data.full_name,
+            phone: data.phone,
+        };
+
+        if (role === 'employee') {
+            userData.employee_profile = {
+                create: {
+                    department: 'General Support',
+                    max_capacity: 10
+                }
+            };
+        }
+
         const user = await prisma.user.create({
-            data: {
-                email: data.email,
-                password_hash,
-                role: 'client',
-                full_name: data.full_name,
-                phone: data.phone,
-            },
+            data: userData,
         });
 
         res.status(201).json({
@@ -60,10 +80,16 @@ export const registerClient = async (req: Request, res: Response): Promise<void>
 
 export const login = async (req: Request, res: Response): Promise<void> => {
     try {
-        const data = loginSchema.parse(req.body);
-        const user = await prisma.user.findUnique({ where: { email: data.email } });
+        const { role } = req.params;
+        if (!['client', 'employee', 'admin'].includes(role)) {
+            res.status(400).json({ error: { code: 'INVALID_ROLE', message: 'Invalid role parameter' } });
+            return;
+        }
 
-        if (!user || !user.is_active || !(await bcrypt.compare(data.password, user.password_hash))) {
+        const data = loginSchema.parse(req.body);
+        const user = await prisma.user.findUnique({ where: { email_role: { email: data.email, role: role as any } } });
+
+        if (!user || user.role !== role || !user.is_active || !(await bcrypt.compare(data.password, user.password_hash))) {
             res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Invalid email or password' } });
             return;
         }
@@ -202,7 +228,8 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        const user = await prisma.user.findUnique({ where: { email } });
+        // forgotPassword: role is unknown, so use findFirst across all roles
+        const user = await prisma.user.findFirst({ where: { email } });
         if (!user) {
             // Return 200 even if user not found to prevent timing/enumeration attacks
             res.status(200).json({ status: 'success' });
@@ -210,10 +237,16 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
         }
 
         const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetTokenHash = await bcrypt.hash(resetToken, 10);
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-        // As Prisma schema lacked password_reset_token, we normally would store this in a separate ResetToken table
-        // or add the fields to User schema and run `npx prisma db push`. 
-        // For now, simulating success.
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                password_reset_token: resetTokenHash,
+                password_reset_expires: expiresAt,
+            }
+        });
 
         console.log(`[Email Mock] Password reset link for ${email}: /reset-password?token=${resetToken}&email=${email}`);
         res.status(200).json({ status: 'success' });
@@ -230,21 +263,25 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
             return;
         }
 
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) {
+        // resetPassword: role is unknown, use findFirst
+        const user = await prisma.user.findFirst({ where: { email } });
+        if (!user || !user.password_reset_expires || user.password_reset_expires < new Date()) {
             res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid or expired token' } });
             return;
         }
 
-        // Token check is bypassed because schema lacked the field
-        // Requires separate ResetToken table for real implementation
+        if (!user.password_reset_token || !(await bcrypt.compare(token, user.password_reset_token))) {
+            res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid or expired token' } });
+            return;
+        }
 
         const newPasswordHash = await bcrypt.hash(new_password, 12);
         await prisma.user.update({
             where: { id: user.id },
             data: {
                 password_hash: newPasswordHash,
-                // Assuming schema is updated or not supporting password_reset_token anymore
+                password_reset_token: null,
+                password_reset_expires: null,
             }
         });
 

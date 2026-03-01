@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'bloc/auth_bloc.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  final String role;
+  const RegisterScreen({super.key, this.role = 'client'});
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -29,7 +30,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
               context,
             ).showSnackBar(SnackBar(content: Text(state.message)));
           } else if (state is AuthAuthenticated) {
-            context.go('/client'); // Only clients self-register
+            if (state.user.role == 'client') {
+              context.go('/client');
+            } else if (state.user.role == 'employee') {
+              context.go('/employee');
+            } else if (state.user.role == 'admin') {
+              context.go('/admin');
+            }
           }
         },
         builder: (context, state) {
@@ -45,9 +52,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Sign up as a client',
-                    style: TextStyle(color: Colors.grey),
+                  Text(
+                    'Sign up as a ${widget.role.isNotEmpty ? widget.role[0].toUpperCase() + widget.role.substring(1) : 'Client'}',
+                    style: const TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 48),
                   TextField(
@@ -83,6 +90,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       onPressed: () {
                         context.read<AuthBloc>().add(
                           AuthRegisterRequested(
+                            widget.role,
                             _emailController.text,
                             _passwordController.text,
                             _nameController.text,
@@ -90,6 +98,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         );
                       },
                       child: const Text('Register'),
+                    ),
+                  const Divider(height: 48),
+                  const Text(
+                    'Switch Role',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  if (widget.role != 'client')
+                    OutlinedButton(
+                      onPressed: () => context.go('/register?role=client'),
+                      child: const Text('Register as Client'),
+                    ),
+                  if (widget.role != 'client') const SizedBox(height: 8),
+                  if (widget.role != 'employee')
+                    OutlinedButton(
+                      onPressed: () => context.go('/register?role=employee'),
+                      child: const Text('Register as Employee'),
+                    ),
+                  if (widget.role != 'employee') const SizedBox(height: 8),
+                  if (widget.role != 'admin')
+                    OutlinedButton(
+                      onPressed: () => context.go('/register?role=admin'),
+                      child: const Text('Register as Admin'),
                     ),
                 ],
               ),

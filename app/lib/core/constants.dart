@@ -2,14 +2,20 @@ import 'package:flutter/material.dart';
 
 class ApiConstants {
   static const String baseUrl =
-      'http://10.0.2.2:3000/v1'; // Android emulator localhost
+      // 'http://10.176.171.153:3000/v1'; // Local physical device IP
+      'https://przs4zmv-3000.inc1.devtunnels.ms/v1'; // Local physical device IP
 
-  static const String login = '/auth/login';
-  static const String register = '/auth/register';
   static const String refresh = '/auth/refresh';
   static const String logout = '/auth/logout';
+  static const String forgotPassword = '/auth/forgot-password';
+  static const String resetPassword = '/auth/reset-password';
 
   static const String tickets = '/tickets';
+  static const String upload = '/upload';
+
+  static const String notifications = '/notifications';
+  static const String notificationsReadAll = '/notifications/read-all';
+  static const String employeeDashboard = '/employees/me/dashboard';
   // Other ends...
 }
 

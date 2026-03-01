@@ -7,21 +7,31 @@ import axios from 'axios';
 
 const prisma = new PrismaClient();
 
+// Default SLA hours per priority (fallback if sla_configs table is empty)
+const DEFAULT_SLA_HOURS: Record<string, number> = {
+    critical: 2,
+    high: 8,
+    medium: 24,
+    low: 72,
+};
+
 const createTicketSchema = z.object({
     title: z.string().min(1),
     description: z.string().min(1),
     category_id: z.string().uuid(),
     priority: z.enum(['low', 'medium', 'high', 'critical']),
+    images: z.array(z.object({
+        imgbb_url: z.string().url(),
+        imgbb_delete_url: z.string().url()
+    })).optional()
 });
 
-function calculateSlaDeadline(priority: string) {
+async function calculateSlaDeadline(priority: string): Promise<Date> {
     const date = new Date();
-    switch (priority) {
-        case 'critical': date.setHours(date.getHours() + 2); break;
-        case 'high': date.setHours(date.getHours() + 8); break;
-        case 'medium': date.setHours(date.getHours() + 24); break;
-        case 'low': date.setHours(date.getHours() + 72); break;
-    }
+    // Try to read from DB config first
+    const config = await prisma.slaConfig.findFirst({ where: { priority: priority as any } });
+    const hours = config ? config.response_hours : (DEFAULT_SLA_HOURS[priority] ?? 24);
+    date.setTime(date.getTime() + hours * 60 * 60 * 1000);
     return date;
 }
 
@@ -37,7 +47,7 @@ export const createTicket = async (req: AuthRequest, res: Response): Promise<voi
         const seq = String(countToday + 1).padStart(4, '0');
         const ticketNumber = `TKT-${today}-${seq}`;
 
-        const sla_deadline = calculateSlaDeadline(data.priority);
+        const sla_deadline = await calculateSlaDeadline(data.priority);
 
         const ticket = await prisma.ticket.create({
             data: {
@@ -49,6 +59,17 @@ export const createTicket = async (req: AuthRequest, res: Response): Promise<voi
                 client_id: userId,
                 ticket_number: ticketNumber,
                 sla_deadline,
+                images: {
+                    create: data.images?.map((img: { imgbb_url: string, imgbb_delete_url: string }) => ({
+                        imgbb_url: img.imgbb_url,
+                        imgbb_delete_url: img.imgbb_delete_url,
+                        uploaded_by: userId,
+                        context: 'ticket'
+                    })) || []
+                }
+            },
+            include: {
+                images: true
             }
         });
 
@@ -94,7 +115,8 @@ export const getTickets = async (req: AuthRequest, res: Response): Promise<void>
             ],
             include: {
                 category: true,
-                assigned_employee: { select: { full_name: true, id: true } }
+                assigned_employee: { select: { full_name: true, id: true } },
+                images: true
             }
         });
 
@@ -191,6 +213,28 @@ export const uploadTicketImage = async (req: AuthRequest, res: Response): Promis
         } else {
             throw new Error('ImgBB upload failed');
         }
+    } catch (err: any) {
+        res.status(500).json({ error: { code: 'SERVER_ERROR', message: err.message } });
+    }
+};
+
+export const getTicketAudit = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        // Ensure ticket exists
+        const ticket = await prisma.ticket.findUnique({ where: { id } });
+        if (!ticket) {
+            res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ticket not found' } });
+            return;
+        }
+
+        const auditLogs = await prisma.ticketAuditLog.findMany({
+            where: { ticket_id: id },
+            orderBy: { changed_at: 'desc' },
+        });
+
+        res.status(200).json({ status: 'success', audit_logs: auditLogs });
     } catch (err: any) {
         res.status(500).json({ error: { code: 'SERVER_ERROR', message: err.message } });
     }

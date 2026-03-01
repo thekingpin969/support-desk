@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient, TicketStatus, ResponseStatus } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { z } from 'zod';
+import { sendNotification } from '../services/notification.service';
 
 const prisma = new PrismaClient();
 
@@ -47,7 +48,7 @@ export const updateResponse = async (req: AuthRequest, res: Response): Promise<v
         }
 
         if (isPendingReview) {
-            await prisma.$transaction([
+            const [ticket] = await prisma.$transaction([
                 prisma.ticket.update({
                     where: { id },
                     data: { status: 'pending_review' },
@@ -62,6 +63,11 @@ export const updateResponse = async (req: AuthRequest, res: Response): Promise<v
                     }
                 }),
             ]);
+
+            const admins = await prisma.user.findMany({ where: { role: 'admin' } });
+            for (const admin of admins) {
+                await sendNotification(admin.id, 'Response Pending Review', `Ticket ${ticket.ticket_number} has a response waiting for review.`);
+            }
         }
 
         res.status(200).json({ status: 'success', response });
@@ -89,7 +95,7 @@ export const createNewResponse = async (req: AuthRequest, res: Response): Promis
         });
 
         if (isPendingReview) {
-            await prisma.$transaction([
+            const [ticket] = await prisma.$transaction([
                 prisma.ticket.update({
                     where: { id },
                     data: { status: 'pending_review' },
@@ -104,6 +110,11 @@ export const createNewResponse = async (req: AuthRequest, res: Response): Promis
                     }
                 })
             ]);
+
+            const admins = await prisma.user.findMany({ where: { role: 'admin' } });
+            for (const admin of admins) {
+                await sendNotification(admin.id, 'Response Pending Review', `Ticket ${ticket.ticket_number} has a new response waiting for review.`);
+            }
         }
 
         res.status(200).json({ status: 'success', response });
@@ -117,21 +128,21 @@ export const approveResponse = async (req: AuthRequest, res: Response): Promise<
         const { id, rid } = req.params;
         const { userId } = req.user!;
 
-        const response = await prisma.ticketResponse.findUnique({ where: { id: rid } });
-        if (!response || response.status !== 'pending_review' || response.ticket_id !== id) {
-            res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid response or not pending review' } });
+        const updateResult = await prisma.ticketResponse.updateMany({
+            where: { id: rid, status: 'pending_review', ticket_id: id },
+            data: {
+                status: 'approved',
+                reviewed_by: userId,
+                reviewed_at: new Date()
+            }
+        });
+
+        if (updateResult.count === 0) {
+            res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid response or already actioned' } });
             return;
         }
 
-        await prisma.$transaction([
-            prisma.ticketResponse.update({
-                where: { id: rid },
-                data: {
-                    status: 'approved',
-                    reviewed_by: userId,
-                    reviewed_at: new Date()
-                }
-            }),
+        const [ticket] = await prisma.$transaction([
             prisma.ticket.update({
                 where: { id },
                 data: {
@@ -150,6 +161,12 @@ export const approveResponse = async (req: AuthRequest, res: Response): Promise<
             }),
         ]);
 
+        const response = await prisma.ticketResponse.findUnique({ where: { id: rid } });
+        if (response) {
+            await sendNotification(response.employee_id, 'Response Approved', `Your response for ticket ${ticket.ticket_number} was approved.`);
+        }
+        await sendNotification(ticket.client_id, 'Support ticket resolved', `Support team has resolved your ticket ${ticket.ticket_number}.`);
+
         res.status(200).json({ status: 'success' });
     } catch (err: any) {
         res.status(500).json({ error: { code: 'SERVER_ERROR', message: err.message } });
@@ -167,22 +184,22 @@ export const rejectResponse = async (req: AuthRequest, res: Response): Promise<v
             return;
         }
 
-        const response = await prisma.ticketResponse.findUnique({ where: { id: rid } });
-        if (!response || response.status !== 'pending_review' || response.ticket_id !== id) {
-            res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid response or not pending review' } });
+        const updateResult = await prisma.ticketResponse.updateMany({
+            where: { id: rid, status: 'pending_review', ticket_id: id },
+            data: {
+                status: 'rejected',
+                admin_feedback: feedback,
+                reviewed_by: userId,
+                reviewed_at: new Date()
+            }
+        });
+
+        if (updateResult.count === 0) {
+            res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Invalid response or already actioned' } });
             return;
         }
 
-        await prisma.$transaction([
-            prisma.ticketResponse.update({
-                where: { id: rid },
-                data: {
-                    status: 'rejected',
-                    admin_feedback: feedback,
-                    reviewed_by: userId,
-                    reviewed_at: new Date()
-                }
-            }),
+        const [ticket] = await prisma.$transaction([
             prisma.ticket.update({
                 where: { id },
                 data: {
@@ -199,6 +216,11 @@ export const rejectResponse = async (req: AuthRequest, res: Response): Promise<v
                 }
             })
         ]);
+
+        const response = await prisma.ticketResponse.findUnique({ where: { id: rid } });
+        if (response) {
+            await sendNotification(response.employee_id, 'Response Rejected', `Your response for ticket ${ticket.ticket_number} was rejected. Feedback: ${feedback}`);
+        }
 
         res.status(200).json({ status: 'success' });
     } catch (err: any) {

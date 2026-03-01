@@ -1,8 +1,10 @@
+import 'dart:developer';
 import 'package:dio/dio.dart';
 import '../../../core/api_client.dart';
 import '../../../core/constants.dart';
 import '../domain/user_model.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class AuthRepository {
   final ApiClient apiClient;
@@ -10,11 +12,23 @@ class AuthRepository {
 
   AuthRepository({required this.apiClient, required this.storage});
 
-  Future<UserModel> login(String email, String password) async {
+  Future<UserModel> login(String role, String email, String password) async {
     try {
+      String? fcmToken;
+      try {
+        fcmToken = await FirebaseMessaging.instance.getToken();
+      } catch (e) {
+        log('Error getting FCM token: $e');
+      }
+
+      final dataPayload = {'email': email, 'password': password};
+      if (fcmToken != null) {
+        dataPayload['fcm_token'] = fcmToken;
+      }
+
       final response = await apiClient.dio.post(
-        ApiConstants.login,
-        data: {'email': email, 'password': password},
+        '/auth/$role/login',
+        data: dataPayload,
       );
 
       final data = response.data;
@@ -29,10 +43,15 @@ class AuthRepository {
     }
   }
 
-  Future<void> register(String email, String password, String fullName) async {
+  Future<void> register(
+    String role,
+    String email,
+    String password,
+    String fullName,
+  ) async {
     try {
       await apiClient.dio.post(
-        ApiConstants.register,
+        '/auth/$role/register',
         data: {'email': email, 'password': password, 'full_name': fullName},
       );
     } on DioException catch (e) {
@@ -55,6 +74,29 @@ class AuthRepository {
       // Ignore errors on logout
     } finally {
       await storage.deleteAll();
+    }
+  }
+
+  Future<void> forgotPassword(String email) async {
+    try {
+      await apiClient.dio.post(
+        ApiConstants.forgotPassword,
+        data: {'email': email},
+      );
+    } on DioException catch (e) {
+      throw e.response?.data['error']['message'] ??
+          'Forgot password request failed';
+    }
+  }
+
+  Future<void> resetPassword(String token, String newPassword) async {
+    try {
+      await apiClient.dio.post(
+        ApiConstants.resetPassword,
+        data: {'token': token, 'new_password': newPassword},
+      );
+    } on DioException catch (e) {
+      throw e.response?.data['error']['message'] ?? 'Password reset failed';
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'bloc/tickets_bloc.dart';
+import '../data/ticket_repository.dart';
 import '../../../core/di.dart';
 
 class CreateTicketScreen extends StatefulWidget {
@@ -16,20 +17,53 @@ class CreateTicketScreen extends StatefulWidget {
 class _CreateTicketScreenState extends State<CreateTicketScreen> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
-  String _priority = 'MEDIUM';
-  String _categoryId =
-      'general'; // In a real app, fetch from /v1/admin/categories
-  File? _selectedImage;
+  String _priority = 'medium';
+  String? _categoryId;
+  Map<String, String> _categories = {};
+  bool _isLoadingCategories = true;
+  final List<File> _selectedImages = [];
 
-  Future<void> _pickImage() async {
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final categories = await sl<TicketRepository>().fetchCategories();
+      if (mounted) {
+        setState(() {
+          _categories = categories;
+          if (_categories.isNotEmpty) {
+            _categoryId = _categories.keys.first;
+          }
+          _isLoadingCategories = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingCategories = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load categories: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickImages() async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 70,
-    );
-    if (pickedFile != null) {
+    final pickedFiles = await picker.pickMultiImage(imageQuality: 70);
+    if (pickedFiles.isNotEmpty) {
+      if (_selectedImages.length + pickedFiles.length > 5) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You can only attach up to 5 images.')),
+        );
+        return;
+      }
       setState(() {
-        _selectedImage = File(pickedFile.path);
+        _selectedImages.addAll(pickedFiles.map((f) => File(f.path)));
       });
     }
   }
@@ -79,11 +113,11 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                     initialValue: _priority,
                     decoration: const InputDecoration(labelText: 'Priority'),
                     items: const [
-                      DropdownMenuItem(value: 'LOW', child: Text('Low')),
-                      DropdownMenuItem(value: 'MEDIUM', child: Text('Medium')),
-                      DropdownMenuItem(value: 'HIGH', child: Text('High')),
+                      DropdownMenuItem(value: 'low', child: Text('Low')),
+                      DropdownMenuItem(value: 'medium', child: Text('Medium')),
+                      DropdownMenuItem(value: 'high', child: Text('High')),
                       DropdownMenuItem(
-                        value: 'CRITICAL',
+                        value: 'critical',
                         child: Text('Critical'),
                       ),
                     ],
@@ -92,41 +126,52 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                         : (v) => setState(() => _priority = v!),
                   ),
                   const SizedBox(height: 16),
-                  // Categories mock
-                  DropdownButtonFormField<String>(
-                    initialValue: _categoryId,
-                    decoration: const InputDecoration(labelText: 'Category'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'general',
-                        child: Text('General Inquiry'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'billing',
-                        child: Text('Billing'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'technical',
-                        child: Text('Technical Support'),
-                      ),
-                    ],
-                    onChanged: isLoading
-                        ? null
-                        : (v) => setState(() => _categoryId = v!),
-                  ),
+                  if (_isLoadingCategories)
+                    const Center(child: CircularProgressIndicator())
+                  else
+                    DropdownButtonFormField<String>(
+                      value: _categoryId,
+                      decoration: const InputDecoration(labelText: 'Category'),
+                      items: _categories.entries.map((entry) {
+                        return DropdownMenuItem(
+                          value: entry.key,
+                          child: Text(entry.value),
+                        );
+                      }).toList(),
+                      onChanged: isLoading
+                          ? null
+                          : (v) => setState(() => _categoryId = v),
+                    ),
                   const SizedBox(height: 24),
                   OutlinedButton.icon(
-                    onPressed: isLoading ? null : _pickImage,
+                    onPressed: isLoading || _selectedImages.length >= 5
+                        ? null
+                        : _pickImages,
                     icon: const Icon(Icons.image),
                     label: Text(
-                      _selectedImage == null ? 'Attach Image' : 'Change Image',
+                      _selectedImages.isEmpty
+                          ? 'Attach Images (Max 5)'
+                          : 'Add More Images',
                     ),
                   ),
-                  if (_selectedImage != null) ...[
+                  if (_selectedImages.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    Text(
-                      'Selected: ${_selectedImage!.path.split('/').last}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    Wrap(
+                      spacing: 8,
+                      children: _selectedImages.map((file) {
+                        return Chip(
+                          label: Text(
+                            file.path.split('/').last,
+                            style: const TextStyle(fontSize: 10),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onDeleted: () {
+                            setState(() {
+                              _selectedImages.remove(file);
+                            });
+                          },
+                        );
+                      }).toList(),
                     ),
                   ],
                   const SizedBox(height: 32),
@@ -135,11 +180,12 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                         ? null
                         : () {
                             if (_titleController.text.isEmpty ||
-                                _descController.text.isEmpty) {
+                                _descController.text.isEmpty ||
+                                _categoryId == null) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text(
-                                    'Title and Description required',
+                                    'Title, Description, and Category are required',
                                   ),
                                 ),
                               );
@@ -149,9 +195,11 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                               CreateTicket(
                                 _titleController.text,
                                 _descController.text,
-                                _categoryId, // assuming UUID in real scenario
+                                _categoryId!,
                                 _priority,
-                                imagePath: _selectedImage?.path,
+                                imagePaths: _selectedImages
+                                    .map((f) => f.path)
+                                    .toList(),
                               ),
                             );
                           },

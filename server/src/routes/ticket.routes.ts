@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { authenticate, requireRole } from '../middleware/auth.middleware';
-import { createTicket, getTickets, getTicketById, uploadTicketImage } from '../controllers/ticket.controller';
+import { createTicket, getTickets, getTicketById, uploadTicketImage, getTicketAudit } from '../controllers/ticket.controller';
+import { getCategories } from '../controllers/admin.controller';
 import { createNewResponse, updateResponse, approveResponse, rejectResponse } from '../controllers/response.controller';
 import { reassignTicket, escalateNotify, reopenTicket, rateTicket } from '../controllers/ticket-actions.controller';
 
@@ -13,6 +14,7 @@ router.use(authenticate);
 // Core CRUD
 router.post('/', requireRole(['client']), createTicket);
 router.get('/', getTickets);
+router.get('/categories', getCategories);
 router.get('/:id', getTicketById);
 
 // Images
@@ -33,6 +35,6 @@ router.post('/:id/reopen', requireRole(['client']), reopenTicket);
 router.post('/:id/rate', requireRole(['client']), rateTicket);
 
 // Audit
-// router.get('/:id/audit', requireRole(['employee', 'admin']), getTicketAudit);
+router.get('/:id/audit', requireRole(['employee', 'admin']), getTicketAudit);
 
 export default router;

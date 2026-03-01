@@ -48,7 +48,12 @@ export const initSlaMonitorJob = () => {
                     if (t.assigned_employee_id) {
                         await sendNotification(t.assigned_employee_id, 'SLA Breached', `Ticket ${t.ticket_number} has breached its SLA.`);
                     }
-                    // Notify admin logic here as well if needed
+
+                    // Notify admins
+                    const admins = await prisma.user.findMany({ where: { role: 'admin' } });
+                    for (const admin of admins) {
+                        await sendNotification(admin.id, 'SLA Breached Flag', `Ticket ${t.ticket_number} escalated due to SLA breach.`);
+                    }
                 }
 
                 // Check for warning

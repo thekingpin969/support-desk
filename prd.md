@@ -121,7 +121,7 @@ All three roles use separate authentication flows on the same backend. A role fi
 
 |**Feature**|**Client**|**Employee**|**Admin**|
 | :- | :- | :- | :- |
-|Self-registration|Yes|No (Admin creates)|No (Seeded)|
+|Self-registration|Yes|Yes|Yes|
 |Email/password login|Yes|Yes|Yes|
 |Password reset via email|Yes|Yes|Yes|
 |JWT access token (15 min)|Yes|Yes|Yes|
@@ -391,8 +391,12 @@ The core entities and their relationships are described below. PostgreSQL is the
 
 |**Method**|**Endpoint**|**Auth**|**Description**|
 | :- | :- | :- | :- |
-|POST|/auth/register|Public|Client self-registration|
-|POST|/auth/login|Public|Login for all roles, returns access + refresh tokens|
+|POST|/auth/client/register|Public|Client self-registration|
+|POST|/auth/client/login|Public|Client Login, returns access + refresh tokens|
+|POST|/auth/employee/register|Public|Employee self-registration|
+|POST|/auth/employee/login|Public|Employee Login, returns access + refresh tokens|
+|POST|/auth/admin/register|Public|Admin self-registration|
+|POST|/auth/admin/login|Public|Admin Login, returns access + refresh tokens|
 |POST|/auth/refresh|Refresh Token|Issue new access token|
 |POST|/auth/logout|Bearer|Revoke refresh token|
 |POST|/auth/forgot-password|Public|Send reset email|

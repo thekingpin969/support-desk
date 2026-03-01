@@ -1,9 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import '../../auth/presentation/bloc/auth_bloc.dart';
+import 'bloc/admin_bloc.dart';
+import '../../../core/di.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) => sl<AdminBloc>()..add(LoadAnalytics()),
+      child: const _AdminDashboardView(),
+    );
+  }
+}
+
+class _AdminDashboardView extends StatelessWidget {
+  const _AdminDashboardView();
 
   @override
   Widget build(BuildContext context) {
@@ -12,45 +27,159 @@ class AdminDashboard extends StatelessWidget {
         title: const Text('Admin Console'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.notifications_none),
+            onPressed: () => context.push('/notifications'),
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-              context.read<AuthBloc>().add(AuthLogoutRequested());
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Logout'),
+                  content: const Text('Are you sure you want to logout?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        context.read<AuthBloc>().add(AuthLogoutRequested());
+                      },
+                      child: const Text(
+                        'Logout',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              );
             },
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildAdminActionCard(
-            context,
-            'Employee Management',
-            Icons.people,
-            'Manage roles and capacity',
-            () {},
-          ),
-          _buildAdminActionCard(
-            context,
-            'System Analytics',
-            Icons.analytics,
-            'View ticket resolution metrics',
-            () {},
-          ),
-          _buildAdminActionCard(
-            context,
-            'SLA Configuration',
-            Icons.settings,
-            'Adjust SLA timers and warnings',
-            () {},
-          ),
-          _buildAdminActionCard(
-            context,
-            'Escalations & Reviews',
-            Icons.campaign,
-            'Requires admin attention',
-            () {},
-          ),
-        ],
+      body: BlocBuilder<AdminBloc, AdminState>(
+        builder: (context, state) {
+          if (state is AdminLoading) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (state is AdminError) {
+            return Center(
+              child: Text(
+                state.message,
+                style: const TextStyle(color: Colors.red),
+              ),
+            );
+          } else if (state is AdminLoaded) {
+            final stats = state.analytics;
+            return RefreshIndicator(
+              onRefresh: () async =>
+                  context.read<AdminBloc>().add(LoadAnalytics()),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  const Text(
+                    'System Overview (Today)',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      _buildMetricCard(
+                        'Total Tickets',
+                        stats['total_today'].toString(),
+                        Colors.blue,
+                      ),
+                      const SizedBox(width: 12),
+                      _buildMetricCard(
+                        'Pending Review',
+                        stats['pending_review'].toString(),
+                        Colors.orange,
+                      ),
+                      const SizedBox(width: 12),
+                      _buildMetricCard(
+                        'Escalated',
+                        stats['escalated'].toString(),
+                        Colors.red,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  const Text(
+                    'Quick Actions',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildAdminActionCard(
+                    context,
+                    'Employee Management',
+                    Icons.people,
+                    'Manage roles and capacity',
+                    () => context.push('/admin/employees'),
+                  ),
+                  _buildAdminActionCard(
+                    context,
+                    'System Analytics',
+                    Icons.analytics,
+                    'View ticket resolution metrics',
+                    () => context.push('/admin/analytics'),
+                  ),
+                  _buildAdminActionCard(
+                    context,
+                    'SLA Configuration',
+                    Icons.settings,
+                    'Adjust SLA timers and warnings',
+                    () => context.push('/admin/sla'),
+                  ),
+                  _buildAdminActionCard(
+                    context,
+                    'Categories Configuration',
+                    Icons.category,
+                    'Manage ticket categories',
+                    () => context.push('/admin/categories'),
+                  ),
+                ],
+              ),
+            );
+          }
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(String title, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[800],
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -32,7 +32,7 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
 export const createEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const data = employeeSchema.parse(req.body);
-        const existing = await prisma.user.findUnique({ where: { email: data.email } });
+        const existing = await prisma.user.findUnique({ where: { email_role: { email: data.email, role: 'employee' } } });
         if (existing) {
             res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Email already exists' } });
             return;
@@ -62,10 +62,14 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     }
 };
 
+import { assignTicket } from '../services/assignment.service';
+
 export const updateEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
         const { department, max_capacity, is_active } = req.body;
+
+        let ticketsToReassign: string[] = [];
 
         await prisma.$transaction(async (tx) => {
             if (is_active !== undefined) {
@@ -79,6 +83,8 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
                     const openTickets = await tx.ticket.findMany({
                         where: { assigned_employee_id: id, status: { in: ['assigned', 'in_progress', 'revision_requested'] } }
                     });
+
+                    ticketsToReassign = openTickets.map((t: any) => t.id);
 
                     await tx.ticket.updateMany({
                         where: { assigned_employee_id: id, status: { in: ['assigned', 'in_progress', 'revision_requested'] } },
@@ -102,6 +108,13 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
                 });
             }
         });
+
+        // Trigger automatic assignment for the relieved tickets after transaction is committed
+        if (ticketsToReassign.length > 0) {
+            for (const ticketId of ticketsToReassign) {
+                await assignTicket(ticketId);
+            }
+        }
 
         res.status(200).json({ status: 'success' });
     } catch (err: any) {
@@ -127,11 +140,30 @@ export const getAnalytics = async (req: AuthRequest, res: Response): Promise<voi
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        const [totalToday, pendingReview, escalated] = await Promise.all([
+        const [totalToday, pendingReview, escalated, allResolved, totalTickets, breachedCount] = await Promise.all([
             prisma.ticket.count({ where: { created_at: { gte: today } } }),
             prisma.ticket.count({ where: { status: 'pending_review' } }),
-            prisma.ticket.count({ where: { status: 'escalated' } })
+            prisma.ticket.count({ where: { status: 'escalated' } }),
+            prisma.ticket.findMany({ where: { status: { in: ['resolved', 'closed'] } }, select: { created_at: true, resolved_at: true } }),
+            prisma.ticket.count(),
+            prisma.ticketAuditLog.count({ where: { to_status: 'escalated' } })
         ]);
+
+        let totalResolutionMs = 0;
+        let validResolvedCount = 0;
+
+        for (const t of allResolved) {
+            if (t.resolved_at) {
+                totalResolutionMs += t.resolved_at.getTime() - t.created_at.getTime();
+                validResolvedCount++;
+            }
+        }
+
+        const avgResolutionHours = validResolvedCount > 0
+            ? (totalResolutionMs / validResolvedCount) / (1000 * 60 * 60)
+            : 0;
+
+        const slaCompliance = totalTickets > 0 ? Math.max(0, ((totalTickets - breachedCount) / totalTickets) * 100) : 100;
 
         res.status(200).json({
             status: 'success',
@@ -139,6 +171,8 @@ export const getAnalytics = async (req: AuthRequest, res: Response): Promise<voi
                 total_today: totalToday,
                 pending_review: pendingReview,
                 escalated: escalated,
+                avg_resolution_hours: avgResolutionHours.toFixed(1),
+                sla_compliance_pct: slaCompliance.toFixed(1),
             }
         });
     } catch (err: any) {

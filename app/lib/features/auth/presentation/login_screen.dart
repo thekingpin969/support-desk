@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'bloc/auth_bloc.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final String role;
+  const LoginScreen({super.key, this.role = 'client'});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -16,6 +17,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final displayRole = widget.role.isNotEmpty
+        ? '${widget.role[0].toUpperCase()}${widget.role.substring(1)}'
+        : 'Client';
+
     return Scaffold(
       body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
@@ -23,7 +28,6 @@ class _LoginScreenState extends State<LoginScreen> {
             ScaffoldMessenger.of(
               context,
             ).showSnackBar(SnackBar(content: Text(state.message)));
-          } else if (state is AuthAuthenticated) {
           } else if (state is AuthAuthenticated) {
             if (state.user.role == 'client') {
               context.go('/client');
@@ -47,8 +51,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Sign in to your account',
+                  Text(
+                    'Sign in to your account as $displayRole',
                     style: TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 48),
@@ -69,6 +73,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     obscureText: true,
                   ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => context.push('/forgot-password'),
+                      child: const Text('Forgot Password?'),
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   if (state is AuthLoading)
                     const Center(child: CircularProgressIndicator())
@@ -77,6 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: () {
                         context.read<AuthBloc>().add(
                           AuthLoginRequested(
+                            widget.role,
                             _emailController.text,
                             _passwordController.text,
                           ),
@@ -90,11 +103,36 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       const Text("Don't have an account?"),
                       TextButton(
-                        onPressed: () => context.push('/register'),
+                        onPressed: () =>
+                            context.push('/register?role=${widget.role}'),
                         child: const Text('Register'),
                       ),
                     ],
                   ),
+                  const Divider(height: 48),
+                  const Text(
+                    'Switch Role',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  if (widget.role != 'client')
+                    OutlinedButton(
+                      onPressed: () => context.go('/login?role=client'),
+                      child: const Text('Login as Client'),
+                    ),
+                  if (widget.role != 'client') const SizedBox(height: 8),
+                  if (widget.role != 'employee')
+                    OutlinedButton(
+                      onPressed: () => context.go('/login?role=employee'),
+                      child: const Text('Login as Employee'),
+                    ),
+                  if (widget.role != 'employee') const SizedBox(height: 8),
+                  if (widget.role != 'admin')
+                    OutlinedButton(
+                      onPressed: () => context.go('/login?role=admin'),
+                      child: const Text('Login as Admin'),
+                    ),
                 ],
               ),
             ),

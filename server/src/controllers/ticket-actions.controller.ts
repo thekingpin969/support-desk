@@ -2,13 +2,14 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { assignTicket } from '../services/assignment.service';
+import { sendNotification } from '../services/notification.service';
 
 const prisma = new PrismaClient();
 
 export const reassignTicket = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { new_employee_id } = req.body;
+        const { employee_id: new_employee_id } = req.body;
         const { userId } = req.user!;
 
         const ticket = await prisma.ticket.findUnique({ where: { id } });
@@ -18,9 +19,10 @@ export const reassignTicket = async (req: AuthRequest, res: Response): Promise<v
         }
 
         // Decrement open_ticket_count for old employee if it wasn't unassigned
-        if (ticket.assigned_employee_id) {
+        const previousEmployeeId = ticket.assigned_employee_id;
+        if (previousEmployeeId) {
             await prisma.employeeProfile.update({
-                where: { user_id: ticket.assigned_employee_id },
+                where: { user_id: previousEmployeeId },
                 data: { open_ticket_count: { decrement: 1 } }
             });
         }
@@ -52,6 +54,12 @@ export const reassignTicket = async (req: AuthRequest, res: Response): Promise<v
                     }
                 })
             ]);
+            // Notify new employee
+            await sendNotification(new_employee_id, 'Ticket Reassigned to You', `Ticket ${ticket.ticket_number} has been assigned to you.`);
+            // Notify previous employee that ticket was taken away
+            if (previousEmployeeId && previousEmployeeId !== new_employee_id) {
+                await sendNotification(previousEmployeeId, 'Ticket Reassigned Away', `Ticket ${ticket.ticket_number} has been reassigned to another employee.`);
+            }
         } else {
             await assignTicket(id);
         }
@@ -61,6 +69,7 @@ export const reassignTicket = async (req: AuthRequest, res: Response): Promise<v
         res.status(500).json({ error: { code: 'SERVER_ERROR', message: err.message } });
     }
 };
+
 
 export const escalateNotify = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -74,13 +83,11 @@ export const escalateNotify = async (req: AuthRequest, res: Response): Promise<v
             return;
         }
 
-        await prisma.notification.create({
-            data: {
-                user_id: ticket.assigned_employee_id,
-                type: 'URGENT_ESCALATION',
-                message: `URGENT: Your assigned ticket ${ticket.ticket_number} has breached SLA. Action required immediately.`,
-            }
-        });
+        await sendNotification(
+            ticket.assigned_employee_id,
+            'URGENT ESCALATION',
+            `URGENT: Your assigned ticket ${ticket.ticket_number} has breached SLA. Action required immediately.`
+        );
 
         res.status(200).json({ status: 'success' });
     } catch (err: any) {
