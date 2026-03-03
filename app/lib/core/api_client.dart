@@ -13,6 +13,7 @@ class ApiClient {
           connectTimeout: const Duration(seconds: 60),
           receiveTimeout: const Duration(seconds: 60),
           responseType: ResponseType.json,
+          headers: {'X-Tunnel-Skip-AntiPhishing-Page': 'true'},
         ),
       ) {
     dio.interceptors.add(

@@ -7,6 +7,7 @@ import '../../auth/presentation/bloc/auth_bloc.dart';
 import '../../tickets/domain/ticket_model.dart';
 import '../../../core/constants.dart';
 import '../../../core/di.dart';
+import '../../../core/logout_dialog.dart';
 import '../data/employee_repository.dart';
 
 class EmployeeDashboard extends StatelessWidget {
@@ -232,7 +233,7 @@ class _EmployeeDashboardViewState extends State<_EmployeeDashboardView>
         margin: const EdgeInsets.symmetric(horizontal: 4),
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -265,9 +266,9 @@ class _EmployeeDashboardViewState extends State<_EmployeeDashboardView>
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.danger.withOpacity(0.1),
+        color: AppColors.danger.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.danger.withOpacity(0.4)),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.4)),
       ),
       child: Row(
         children: [
@@ -345,7 +346,7 @@ class _EmployeeDashboardViewState extends State<_EmployeeDashboardView>
           border: Border(left: BorderSide(color: indicator, width: 4)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
@@ -366,7 +367,7 @@ class _EmployeeDashboardViewState extends State<_EmployeeDashboardView>
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: indicator.withOpacity(0.12),
+                        color: indicator.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -386,7 +387,7 @@ class _EmployeeDashboardViewState extends State<_EmployeeDashboardView>
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.danger.withOpacity(0.12),
+                          color: AppColors.danger.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(
@@ -474,31 +475,8 @@ class _EmployeeDashboardViewState extends State<_EmployeeDashboardView>
           ),
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.textSecondary),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Logout'),
-                  content: const Text('Are you sure you want to logout?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        context.read<AuthBloc>().add(AuthLogoutRequested());
-                      },
-                      child: const Text(
-                        'Logout',
-                        style: TextStyle(color: AppColors.danger),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+            tooltip: 'Logout',
+            onPressed: () => showLogoutDialog(context),
           ),
         ],
       ),

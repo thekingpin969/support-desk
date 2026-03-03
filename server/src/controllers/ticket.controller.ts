@@ -40,6 +40,32 @@ export const createTicket = async (req: AuthRequest, res: Response): Promise<voi
         const data = createTicketSchema.parse(req.body);
         const userId = req.user!.userId;
 
+        // GAP 7: Duplicate ticket warning — check same title + client within 10 minutes
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+        const duplicateCandidate = await prisma.ticket.findFirst({
+            where: {
+                client_id: userId,
+                title: data.title,
+                status: { notIn: ['closed', 'resolved'] },
+                created_at: { gte: tenMinutesAgo }
+            }
+        });
+        if (duplicateCandidate) {
+            // Return a warning (not a hard block) — client can re-submit with a ?force=true param
+            const force = req.query.force === 'true';
+            if (!force) {
+                res.status(409).json({
+                    status: 'warning',
+                    warning: {
+                        code: 'DUPLICATE_SUSPECTED',
+                        message: `A ticket with the same title was submitted ${Math.round((Date.now() - duplicateCandidate.created_at.getTime()) / 60000)} minutes ago (${duplicateCandidate.ticket_number}). Submit again with ?force=true to confirm.`,
+                        existing_ticket_number: duplicateCandidate.ticket_number,
+                    }
+                });
+                return;
+            }
+        }
+
         const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const countToday = await prisma.ticket.count({
             where: { ticket_number: { startsWith: `TKT-${today}` } }

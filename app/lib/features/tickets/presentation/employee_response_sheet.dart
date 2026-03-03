@@ -18,7 +18,6 @@ class EmployeeResponseSheet extends StatefulWidget {
 class _EmployeeResponseSheetState extends State<EmployeeResponseSheet> {
   final _contentController = TextEditingController();
   final List<File> _selectedImages = [];
-  bool _isLoading = false;
 
   @override
   void initState() {
@@ -116,9 +115,11 @@ class _EmployeeResponseSheetState extends State<EmployeeResponseSheet> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.warning.withOpacity(0.1),
+                  color: AppColors.warning.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.warning.withOpacity(0.4)),
+                  border: Border.all(
+                    color: AppColors.warning.withValues(alpha: 0.4),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -193,9 +194,7 @@ class _EmployeeResponseSheetState extends State<EmployeeResponseSheet> {
                 // Save Draft
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: _isLoading
-                        ? null
-                        : () => _submit(saveDraft: true),
+                    onPressed: () => _submit(saveDraft: true),
                     child: const Text('Save Draft'),
                   ),
                 ),
@@ -207,9 +206,7 @@ class _EmployeeResponseSheetState extends State<EmployeeResponseSheet> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                     ),
-                    onPressed: _isLoading
-                        ? null
-                        : () => _submit(saveDraft: false),
+                    onPressed: () => _submit(saveDraft: false),
                     child: const Text(
                       'Submit for Review',
                       style: TextStyle(color: Colors.white),

@@ -8,6 +8,7 @@ import '../../../core/di.dart';
 import '../../auth/presentation/bloc/auth_bloc.dart';
 import '../../dashboard/data/admin_repository.dart';
 
+import '../data/ticket_repository.dart';
 import '../domain/ticket_model.dart';
 import 'bloc/tickets_bloc.dart';
 import 'employee_response_sheet.dart';
@@ -22,17 +23,55 @@ class TicketDetailScreen extends StatefulWidget {
 
 class _TicketDetailScreenState extends State<TicketDetailScreen> {
   List<dynamic> _auditLogs = [];
-  bool _auditLoading = false;
   bool _showAudit = false;
+
+  // TicketsBloc owned by this state
+  late final TicketsBloc _ticketsBloc;
+
+  // Store the Future so it isn't re-kicked on every rebuild
+  late Future<TicketModel?> _ticketFuture;
 
   @override
   void initState() {
     super.initState();
+    _ticketsBloc = sl<TicketsBloc>();
+    _loadTicket();
+    _fetchAuditTrail();
+  }
+
+  void _loadTicket() {
+    _ticketFuture = sl<TicketRepository>().fetchTicketById(widget.ticket.id).then((
+      t,
+    ) {
+      if (t != null) {
+        debugPrint(
+          'TICKET DETAIL LOADED: \${t.ticketNumber} with \${t.responses.length} responses',
+        );
+        for (var r in t.responses) {
+          debugPrint('Response: \${r.content} - \${r.type}');
+        }
+      } else {
+        debugPrint('TICKET DETAIL LOAD FAILED: fetchTicketById returned null');
+      }
+      return t;
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticketsBloc.close();
+    super.dispose();
+  }
+
+  void _refresh() {
+    setState(() {
+      _loadTicket();
+      _auditLogs = [];
+    });
     _fetchAuditTrail();
   }
 
   Future<void> _fetchAuditTrail() async {
-    setState(() => _auditLoading = true);
     try {
       final response = await sl<AdminRepository>().apiClient.dio.get(
         '${ApiConstants.tickets}/${widget.ticket.id}/audit',
@@ -40,44 +79,71 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       final logs = response.data['audit_logs'] as List? ?? [];
       if (mounted) setState(() => _auditLogs = logs);
     } catch (_) {
-      // Silently fail — audit is non-critical
-    } finally {
-      if (mounted) setState(() => _auditLoading = false);
+      // Audit is non-critical — silently ignore
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => sl<TicketsBloc>(),
-      child: Builder(
-        builder: (context) {
+    return BlocProvider.value(
+      value: _ticketsBloc,
+      child: FutureBuilder<TicketModel?>(
+        future: _ticketFuture,
+        builder: (ctx, snapshot) {
+          // Use fresh data if available, otherwise fall back to widget.ticket
+          final ticket = snapshot.data ?? widget.ticket;
+          final isLoading = snapshot.connectionState == ConnectionState.waiting;
+
           return Scaffold(
             backgroundColor: AppColors.background,
             appBar: AppBar(
               title: Text(
-                widget.ticket.ticketNumber,
+                ticket.ticketNumber,
                 style: const TextStyle(fontSize: 16),
               ),
+              actions: [
+                if (isLoading)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    tooltip: 'Refresh',
+                    onPressed: _refresh,
+                  ),
+              ],
             ),
-            body: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildTicketHeader(),
-                  const SizedBox(height: 24),
-                  _buildClientInfo(context),
-                  if (widget.ticket.images.isNotEmpty) ...[
+            body: Builder(
+              builder: (innerCtx) => SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildTicketHeader(ticket),
                     const SizedBox(height: 24),
-                    _buildImages(context),
+                    _buildClientInfo(innerCtx, ticket),
+                    if (ticket.images.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      _buildImages(innerCtx, ticket),
+                    ],
+                    const SizedBox(height: 24),
+                    _buildResponses(innerCtx, ticket, isLoading),
+                    const SizedBox(height: 24),
+                    _buildAuditTrail(),
+                    _buildRoleBasedActions(innerCtx, ticket),
                   ],
-                  const SizedBox(height: 24),
-                  _buildResponses(context),
-                  const SizedBox(height: 24),
-                  _buildAuditTrail(),
-                  _buildRoleBasedActions(context),
-                ],
+                ),
               ),
             ),
           );
@@ -87,7 +153,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   }
 
   // ─── Ticket header card ─────────────────────────────────────────────────────
-  Widget _buildTicketHeader() {
+  Widget _buildTicketHeader(TicketModel ticket) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -100,18 +166,18 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _priorityBadge(widget.ticket.priority),
-              _statusBadge(widget.ticket.status),
+              _priorityBadge(ticket.priority),
+              _statusBadge(ticket.status),
             ],
           ),
           const SizedBox(height: 16),
           Text(
-            widget.ticket.title,
+            ticket.title,
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Text(
-            widget.ticket.description,
+            ticket.description,
             style: TextStyle(fontSize: 14, color: Colors.grey[700]),
           ),
           const SizedBox(height: 16),
@@ -121,12 +187,12 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Created: ${DateFormat('MMM dd, HH:mm').format(widget.ticket.createdAt)}',
+                'Created: ${DateFormat('MMM dd, HH:mm').format(ticket.createdAt)}',
                 style: TextStyle(fontSize: 12, color: Colors.grey[500]),
               ),
-              if (widget.ticket.slaDeadline != null)
+              if (ticket.slaDeadline != null)
                 Text(
-                  'SLA: ${DateFormat('MMM dd, HH:mm').format(widget.ticket.slaDeadline!)}',
+                  'SLA: ${DateFormat('MMM dd, HH:mm').format(ticket.slaDeadline!)}',
                   style: TextStyle(fontSize: 12, color: Colors.red[400]),
                 ),
             ],
@@ -141,7 +207,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: c.withOpacity(0.12),
+        color: c.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -152,17 +218,50 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   }
 
   Widget _statusBadge(String status) {
+    Color color;
+    switch (status.toLowerCase()) {
+      case 'open':
+        color = AppColors.info;
+        break;
+      case 'assigned':
+      case 'reassigned':
+        color = AppColors.primary;
+        break;
+      case 'in_progress':
+        color = Colors.blue;
+        break;
+      case 'pending_review':
+        color = Colors.orange;
+        break;
+      case 'revision_requested':
+        color = Colors.deepOrange;
+        break;
+      case 'escalated':
+        color = Colors.red;
+        break;
+      case 'resolved':
+        color = Colors.green;
+        break;
+      case 'closed':
+        color = Colors.grey;
+        break;
+      case 'reopened':
+        color = Colors.teal;
+        break;
+      default:
+        color = AppColors.primary;
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.primaryLight,
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         status.toUpperCase().replaceAll('_', ' '),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
-          color: AppColors.primary,
+          color: color,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -183,7 +282,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   }
 
   // ─── Client info (visible to employee and admin) ─────────────────────────────
-  Widget _buildClientInfo(BuildContext context) {
+  Widget _buildClientInfo(BuildContext context, TicketModel ticket) {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, state) {
         if (state is! AuthAuthenticated) return const SizedBox.shrink();
@@ -191,7 +290,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         if (role != 'employee' && role != 'admin') {
           return const SizedBox.shrink();
         }
-        final client = widget.ticket.client;
+        final client = ticket.client;
         if (client == null) return const SizedBox.shrink();
         return Container(
           padding: const EdgeInsets.all(14),
@@ -235,7 +334,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   }
 
   // ─── Image thumbnails with fullscreen viewer ─────────────────────────────────
-  Widget _buildImages(BuildContext context) {
+  Widget _buildImages(BuildContext context, TicketModel ticket) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -248,9 +347,9 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           height: 100,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: widget.ticket.images.length,
+            itemCount: ticket.images.length,
             itemBuilder: (context, index) {
-              final image = widget.ticket.images[index];
+              final image = ticket.images[index];
               return GestureDetector(
                 onTap: () => _openFullscreen(context, image.imageUrl),
                 child: Container(
@@ -286,7 +385,11 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   }
 
   // ─── Response thread ─────────────────────────────────────────────────────────
-  Widget _buildResponses(BuildContext context) {
+  Widget _buildResponses(
+    BuildContext context,
+    TicketModel ticket,
+    bool isLoading,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -295,18 +398,15 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
-        if (widget.ticket.responses.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey[200]!),
-            ),
-            child: const Text(
-              'No responses yet.',
-              style: TextStyle(color: Colors.grey),
-            ),
+        if (isLoading)
+          const Text(
+            'Loading responses...',
+            style: TextStyle(color: Colors.blue),
+          )
+        else if (ticket.responses.isEmpty)
+          const Text(
+            'No responses yet.',
+            style: TextStyle(color: AppColors.textSecondary),
           )
         else
           BlocBuilder<AuthBloc, AuthState>(
@@ -316,9 +416,9 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                   authState.user.role == 'admin';
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: widget.ticket.responses
-                    .map((r) => _buildResponseItem(context, r, isAdmin))
-                    .toList(),
+                children: ticket.responses.map((r) {
+                  return _buildResponseItem(context, r, isAdmin, ticket.id);
+                }).toList(),
               );
             },
           ),
@@ -330,27 +430,43 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     BuildContext context,
     TicketResponse response,
     bool isAdmin,
+    String ticketId,
   ) {
     Color typeColor = Colors.blue;
+    String typeLabel = response.type.toUpperCase().replaceAll('_', ' ');
     if (response.type == 'APPROVED' || response.type == 'approved') {
       typeColor = Colors.green;
+      typeLabel = 'OFFICIAL RESPONSE';
     } else if (response.type == 'REJECTED' || response.type == 'rejected') {
-      typeColor = Colors.red;
+      typeColor = Colors.orange;
+      typeLabel = 'REVISION REQUESTED';
     } else if (response.type == 'PENDING_REVIEW' ||
         response.type == 'pending_review') {
       typeColor = Colors.orange;
+      typeLabel = 'PENDING REVIEW';
     } else if (response.type == 'REVISION_REQUESTED' ||
         response.type == 'revision_requested') {
-      typeColor = AppColors.warning;
+      typeColor = Colors.orange;
+      typeLabel = 'REVISION REQUESTED';
     }
+
+    final isApproved =
+        response.type == 'APPROVED' || response.type == 'approved';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: isApproved
+            ? Colors.green.withValues(alpha: 0.04)
+            : AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(
+          color: isApproved
+              ? Colors.green.withValues(alpha: 0.35)
+              : Colors.grey[200]!,
+          width: isApproved ? 1.5 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,11 +481,11 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: typeColor.withOpacity(0.1),
+                  color: typeColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  response.type.toUpperCase().replaceAll('_', ' '),
+                  typeLabel,
                   style: TextStyle(
                     fontSize: 10,
                     color: typeColor,
@@ -381,35 +497,42 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           ),
           const SizedBox(height: 8),
           Text(response.content, style: TextStyle(color: Colors.grey[800])),
-          // Show admin feedback if response was rejected
+          // Show revision instructions if admin requested revision
           if (response.adminFeedback != null &&
               response.adminFeedback!.isNotEmpty) ...[
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.danger.withOpacity(0.07),
+                color: Colors.orange.withValues(alpha: 0.07),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Admin Feedback:',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.danger,
-                    ),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.edit_note,
+                        size: 14,
+                        color: Colors.orange,
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'Revision Instructions:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
                     response.adminFeedback!,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.danger,
-                    ),
+                    style: const TextStyle(fontSize: 13, color: Colors.orange),
                   ),
                 ],
               ),
@@ -420,34 +543,39 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             DateFormat('MMM dd, HH:mm').format(response.createdAt),
             style: TextStyle(fontSize: 10, color: Colors.grey[500]),
           ),
-          // Admin approve/reject buttons on pending_review
+          // Admin approve / ask-for-revision buttons on pending_review
           if (isAdmin &&
               (response.type == 'PENDING_REVIEW' ||
                   response.type == 'pending_review')) ...[
             const SizedBox(height: 12),
             const Divider(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                TextButton(
-                  onPressed: () => _showRejectDialog(context, response.id),
-                  child: const Text(
-                    'Reject',
-                    style: TextStyle(color: Colors.red),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orange,
+                    side: const BorderSide(color: Colors.orange),
                   ),
+                  onPressed: () =>
+                      _showRevisionDialog(context, response.id, ticketId),
+                  icon: const Icon(Icons.edit_note, size: 16),
+                  label: const Text('Ask for Revision'),
                 ),
-                const SizedBox(width: 8),
-                ElevatedButton(
+                ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                   ),
                   onPressed: () {
                     context.read<TicketsBloc>().add(
-                      ApproveResponse(widget.ticket.id, response.id),
+                      ApproveResponse(ticketId, response.id),
                     );
                   },
-                  child: const Text(
-                    'Approve',
+                  icon: const Icon(Icons.check, size: 16, color: Colors.white),
+                  label: const Text(
+                    'Approve & Send',
                     style: TextStyle(color: Colors.white),
                   ),
                 ),
@@ -459,39 +587,65 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     );
   }
 
-  void _showRejectDialog(BuildContext ctx, String responseId) {
-    final feedbackCtrl = TextEditingController();
+  void _showRevisionDialog(
+    BuildContext ctx,
+    String responseId,
+    String ticketId,
+  ) {
+    final instructionCtrl = TextEditingController();
     showDialog(
       context: ctx,
       builder: (dialogCtx) => AlertDialog(
-        title: const Text('Reject Response'),
-        content: TextField(
-          controller: feedbackCtrl,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'Feedback / Reason',
-            border: OutlineInputBorder(),
-          ),
+        title: Row(
+          children: const [
+            Icon(Icons.edit_note, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Request Revision'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Provide clear revision instructions for the employee. They will be notified to rewrite their response.',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: instructionCtrl,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Revision Instructions',
+                hintText: 'e.g. Please provide more detail on step 2...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
             onPressed: () {
-              if (feedbackCtrl.text.trim().isEmpty) return;
+              if (instructionCtrl.text.trim().isEmpty) return;
               ctx.read<TicketsBloc>().add(
                 RejectResponse(
-                  widget.ticket.id,
+                  ticketId,
                   responseId,
-                  feedback: feedbackCtrl.text.trim(),
+                  feedback: instructionCtrl.text.trim(),
                 ),
               );
               Navigator.pop(dialogCtx);
             },
-            child: const Text('Reject', style: TextStyle(color: Colors.white)),
+            icon: const Icon(Icons.send, size: 16, color: Colors.white),
+            label: const Text(
+              'Send Revision Request',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -519,12 +673,6 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(width: 8),
-                  if (_auditLoading)
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
                   const Spacer(),
                   Icon(
                     _showAudit
@@ -617,20 +765,17 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   }
 
   // ─── Role-based action buttons ────────────────────────────────────────────────
-  Widget _buildRoleBasedActions(BuildContext context) {
+  Widget _buildRoleBasedActions(BuildContext context, TicketModel ticket) {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, state) {
         if (state is! AuthAuthenticated) return const SizedBox.shrink();
         final role = state.user.role;
+        final status = ticket.status.toLowerCase();
 
         // ── Client actions on resolved/closed ──────────────────────────────────
         if (role == 'client') {
-          final isResolved =
-              widget.ticket.status == 'resolved' ||
-              widget.ticket.status == 'RESOLVED';
-          final isClosed =
-              widget.ticket.status == 'closed' ||
-              widget.ticket.status == 'CLOSED';
+          final isResolved = status == 'resolved';
+          final isClosed = status == 'closed';
           if (isResolved || isClosed) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -644,9 +789,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: () {
-                    context.read<TicketsBloc>().add(
-                      ReopenTicket(widget.ticket.id),
-                    );
+                    context.read<TicketsBloc>().add(ReopenTicket(ticket.id));
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Ticket Reopened')),
                     );
@@ -663,8 +806,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
 
         // ── Employee actions ────────────────────────────────────────────────────
         if (role == 'employee') {
-          // Determine if the employee can still respond
-          final canRespond = _canEmployeeRespond();
+          final canRespond = _canEmployeeRespond(ticket);
           if (!canRespond) return const SizedBox.shrink();
 
           return Column(
@@ -683,7 +825,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                     ),
                     builder: (_) => BlocProvider.value(
                       value: context.read<TicketsBloc>(),
-                      child: EmployeeResponseSheet(ticket: widget.ticket),
+                      child: EmployeeResponseSheet(ticket: ticket),
                     ),
                   );
                 },
@@ -696,6 +838,41 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
 
         // ── Admin actions ───────────────────────────────────────────────────────
         if (role == 'admin') {
+          // When ticket is resolved or closed, no admin actions needed
+          if (status == 'resolved' || status == 'closed') {
+            return const SizedBox.shrink();
+          }
+
+          // When ticket is pending_review — guide admin to review the response
+          if (status == 'pending_review') {
+            return Container(
+              margin: const EdgeInsets.only(top: 24),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: const [
+                  Icon(Icons.rate_review, color: Colors.orange),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'An employee response is awaiting your review. Scroll up to Approve or Ask for Revision.',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          // All other statuses — show escalate/reassign
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -703,9 +880,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 onPressed: () {
-                  context.read<TicketsBloc>().add(
-                    EscalateTicket(widget.ticket.id),
-                  );
+                  context.read<TicketsBloc>().add(EscalateTicket(ticket.id));
                 },
                 icon: const Icon(Icons.warning, color: Colors.white),
                 label: const Text(
@@ -728,17 +903,18 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     );
   }
 
-  /// Returns true if an employee should see the Write Response button.
-  /// Hides it when any response is pending_review, approved, or ticket is resolved/closed.
-  bool _canEmployeeRespond() {
-    final status = widget.ticket.status.toLowerCase();
+  /// Returns true if the employee should see the Write Response button.
+  /// Hides when ticket is pending_review, resolved, or closed.
+  /// Shows when ticket is revision_requested — employee must rewrite and resubmit.
+  bool _canEmployeeRespond(TicketModel ticket) {
+    final status = ticket.status.toLowerCase();
     if (status == 'resolved' ||
         status == 'closed' ||
         status == 'pending_review') {
       return false;
     }
     // Also check if any response is already pending_review or approved
-    for (final r in widget.ticket.responses) {
+    for (final r in ticket.responses) {
       final rStatus = r.type.toLowerCase();
       if (rStatus == 'pending_review' || rStatus == 'approved') {
         return false;
@@ -884,7 +1060,7 @@ class _FullscreenImageViewer extends StatelessWidget {
             loadingBuilder: (_, child, progress) => progress == null
                 ? child
                 : const Center(child: CircularProgressIndicator()),
-            errorBuilder: (_, __, ___) =>
+            errorBuilder: (_, __, _e) =>
                 const Icon(Icons.broken_image, color: Colors.white, size: 64),
           ),
         ),

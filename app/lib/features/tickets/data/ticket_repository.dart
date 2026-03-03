@@ -33,7 +33,7 @@ class TicketRepository {
           'description': description,
           'category_id': categoryId,
           'priority': priority,
-          if (images != null) 'images': images,
+          if (images != null) ...{'images': images},
         },
       );
       return TicketModel.fromJson(response.data['ticket']);
@@ -100,6 +100,22 @@ class TicketRepository {
       }
     } on DioException catch (e) {
       throw e.response?.data['error']['message'] ?? 'Failed to create response';
+    }
+  }
+
+  Future<TicketModel?> fetchTicketById(String ticketId) async {
+    try {
+      final response = await apiClient.dio.get(
+        '${ApiConstants.tickets}/$ticketId',
+      );
+      print(
+        'DEBUG API: ${response.data}',
+      ); // Let's log raw response to catch the structure
+      return TicketModel.fromJson(response.data['ticket']);
+    } catch (e, stack) {
+      // Catch DioException and any JSON parsing errors
+      print('Error fetching ticket by ID: $e\n$stack');
+      return null;
     }
   }
 

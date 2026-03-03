@@ -156,16 +156,16 @@ export const approveResponse = async (req: AuthRequest, res: Response): Promise<
                     from_status: 'pending_review',
                     to_status: 'resolved',
                     actor_id: userId,
-                    note: 'Admin approved response'
+                    note: 'Admin approved response — ticket resolved and sent to client'
                 }
             }),
         ]);
 
         const response = await prisma.ticketResponse.findUnique({ where: { id: rid } });
         if (response) {
-            await sendNotification(response.employee_id, 'Response Approved', `Your response for ticket ${ticket.ticket_number} was approved.`);
+            await sendNotification(response.employee_id, 'Response Approved ✅', `Your response for ticket ${ticket.ticket_number} was approved by the admin and sent to the client.`);
         }
-        await sendNotification(ticket.client_id, 'Support ticket resolved', `Support team has resolved your ticket ${ticket.ticket_number}.`);
+        await sendNotification(ticket.client_id, 'Ticket Resolved ✅', `Your support ticket ${ticket.ticket_number} has been resolved. Open the ticket to view the official response from our support team.`);
 
         res.status(200).json({ status: 'success' });
     } catch (err: any) {
@@ -212,14 +212,25 @@ export const rejectResponse = async (req: AuthRequest, res: Response): Promise<v
                     from_status: 'pending_review',
                     to_status: 'revision_requested',
                     actor_id: userId,
-                    note: `Admin rejected response`
+                    note: `Admin requested revision — employee must revise and resubmit`
                 }
             })
         ]);
 
         const response = await prisma.ticketResponse.findUnique({ where: { id: rid } });
         if (response) {
-            await sendNotification(response.employee_id, 'Response Rejected', `Your response for ticket ${ticket.ticket_number} was rejected. Feedback: ${feedback}`);
+            await sendNotification(response.employee_id, 'Revision Requested 🔄', `The admin has requested a revision for your response on ticket ${ticket.ticket_number}. Revision instructions: ${feedback}`);
+        }
+
+        // GAP 6: Flag tickets with 3+ rejections — suggest reassignment to admin
+        const rejectionCount = await prisma.ticketResponse.count({
+            where: { ticket_id: id, status: 'rejected' }
+        });
+        if (rejectionCount >= 3) {
+            const admins = await prisma.user.findMany({ where: { role: 'admin' } });
+            for (const admin of admins) {
+                await sendNotification(admin.id, 'Multiple Revisions Required ⚠️', `Ticket ${ticket.ticket_number} has had ${rejectionCount} revision requests. Consider reassigning this ticket to a different employee.`);
+            }
         }
 
         res.status(200).json({ status: 'success' });

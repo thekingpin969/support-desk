@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/di.dart';
 import '../data/admin_repository.dart';
 
@@ -191,7 +192,9 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
                     emp['is_active'] ? Icons.check_circle : Icons.cancel,
                     color: emp['is_active'] ? Colors.green : Colors.red,
                   ),
-                  onTap: () => _showEditEmployeeDialog(emp),
+                  onTap: () =>
+                      context.push('/admin/employee-detail', extra: emp),
+                  onLongPress: () => _showEditEmployeeDialog(emp),
                 );
               },
             ),

@@ -10,6 +10,8 @@ import '../features/dashboard/presentation/employee_management_screen.dart';
 import '../features/dashboard/presentation/sla_config_screen.dart';
 import '../features/dashboard/presentation/category_management_screen.dart';
 import '../features/dashboard/presentation/analytics_screen.dart';
+import '../features/dashboard/presentation/admin_tickets_screen.dart';
+import '../features/dashboard/presentation/employee_detail_screen.dart';
 import '../features/tickets/presentation/create_ticket_screen.dart';
 import '../features/splash_screen.dart';
 
@@ -80,6 +82,20 @@ class AppRouter {
       GoRoute(
         path: '/admin/analytics',
         builder: (context, state) => const AnalyticsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/tickets',
+        builder: (context, state) {
+          final filter = state.uri.queryParameters['filter'];
+          return AdminTicketsScreen(initialFilter: filter);
+        },
+      ),
+      GoRoute(
+        path: '/admin/employee-detail',
+        builder: (context, state) {
+          final employee = state.extra as Map<String, dynamic>;
+          return EmployeeDetailScreen(employee: employee);
+        },
       ),
       GoRoute(
         path: '/notifications',

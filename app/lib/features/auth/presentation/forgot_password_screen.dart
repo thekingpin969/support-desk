@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'bloc/auth_bloc.dart';
+import '../../../core/app_snackbar.dart';
+import '../../../core/loading_button.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -14,27 +16,35 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _emailController = TextEditingController();
 
   @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  void _submit(BuildContext context) {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      AppSnackBar.warning(context, 'Please enter your email address.');
+      return;
+    }
+    context.read<AuthBloc>().add(AuthForgotPasswordRequested(email));
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Forgot Password')),
       body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthError) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(state.message)));
+            AppSnackBar.error(context, state.message);
           } else if (state is AuthPasswordResetLinkSent) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Password reset link sent to your email.'),
-              ),
-            );
-            context.push(
-              '/reset-password',
-            ); // Or context.pop() depending on flow
+            AppSnackBar.success(context, 'Reset link sent! Check your inbox.');
+            context.push('/reset-password');
           }
         },
         builder: (context, state) {
+          final isLoading = state is AuthLoading;
           return SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
@@ -53,26 +63,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   const SizedBox(height: 32),
                   TextField(
                     controller: _emailController,
+                    enabled: !isLoading,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _submit(context),
                     decoration: const InputDecoration(
                       labelText: 'Email',
                       prefixIcon: Icon(Icons.email_outlined),
                     ),
-                    keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 32),
-                  if (state is AuthLoading)
-                    const Center(child: CircularProgressIndicator())
-                  else
-                    ElevatedButton(
-                      onPressed: () {
-                        if (_emailController.text.isNotEmpty) {
-                          context.read<AuthBloc>().add(
-                            AuthForgotPasswordRequested(_emailController.text),
-                          );
-                        }
-                      },
-                      child: const Text('Send Reset Link'),
-                    ),
+                  LoadingButton(
+                    isLoading: isLoading,
+                    label: 'Send Reset Link',
+                    icon: Icons.send_outlined,
+                    onPressed: () => _submit(context),
+                  ),
                 ],
               ),
             ),

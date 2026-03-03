@@ -5,6 +5,7 @@ import '../../auth/presentation/bloc/auth_bloc.dart';
 import '../../tickets/presentation/bloc/tickets_bloc.dart';
 import '../../../core/constants.dart';
 import '../../../core/di.dart';
+import '../../../core/logout_dialog.dart';
 import 'package:intl/intl.dart';
 import '../../tickets/domain/ticket_model.dart';
 
@@ -349,37 +350,10 @@ class _ClientDashboardView extends StatelessWidget {
             false,
             onTap: () => context.push('/notifications'),
           ),
-          BlocBuilder<AuthBloc, AuthState>(
-            builder: (context, state) {
-              return IconButton(
-                icon: const Icon(Icons.logout, color: Colors.grey),
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Logout'),
-                      content: const Text('Are you sure you want to logout?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancel'),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            context.read<AuthBloc>().add(AuthLogoutRequested());
-                          },
-                          child: const Text(
-                            'Logout',
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.grey),
+            tooltip: 'Logout',
+            onPressed: () => showLogoutDialog(context),
           ),
         ],
       ),
@@ -429,127 +403,132 @@ class _TicketCard extends StatelessWidget {
       indicatorColor = Colors.grey;
     }
 
-    return GestureDetector(
-      onTap: () {
-        context.push('/ticket-detail', extra: ticket as TicketModel);
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey[100]!),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x05000000),
-              blurRadius: 8,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(width: 4, color: indicatorColor),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: indicatorColor.withAlpha(25),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                ticket.priority,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: indicatorColor,
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: () {
+          context.push('/ticket-detail', extra: ticket as TicketModel);
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey[100]!),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x05000000),
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(width: 4, color: indicatorColor),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
                                 ),
-                              ),
-                            ),
-                            Text(
-                              ticket.ticketNumber,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey[400],
-                                fontFamily: 'monospace',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          ticket.title,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          ticket.description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[500],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.timer,
-                                  size: 16,
-                                  color: Colors.grey[400],
+                                decoration: BoxDecoration(
+                                  color: indicatorColor.withAlpha(25),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  ticket.slaDeadline != null
-                                      ? DateFormat(
-                                          'HH:mm',
-                                        ).format(ticket.slaDeadline!)
-                                      : 'N/A',
+                                child: Text(
+                                  ticket.priority,
                                   style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey[500],
-                                    fontFamily: 'monospace',
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: indicatorColor,
                                   ),
                                 ),
-                              ],
-                            ),
-                            Text(
-                              'Status: ${ticket.status}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey[400],
-                                fontWeight: FontWeight.w500,
                               ),
+                              Text(
+                                ticket.ticketNumber,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey[400],
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            ticket.title,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            ticket.description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.timer,
+                                    size: 16,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    ticket.slaDeadline != null
+                                        ? DateFormat(
+                                            'HH:mm',
+                                          ).format(ticket.slaDeadline!)
+                                        : 'N/A',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[500],
+                                      fontFamily: 'monospace',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                'Status: ${ticket.status}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey[400],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

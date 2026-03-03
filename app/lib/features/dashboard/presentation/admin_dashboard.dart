@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../auth/presentation/bloc/auth_bloc.dart';
 import 'bloc/admin_bloc.dart';
 import '../../../core/di.dart';
+import '../../../core/logout_dialog.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
@@ -32,31 +32,8 @@ class _AdminDashboardView extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Logout'),
-                  content: const Text('Are you sure you want to logout?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        context.read<AuthBloc>().add(AuthLogoutRequested());
-                      },
-                      child: const Text(
-                        'Logout',
-                        style: TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+            tooltip: 'Logout',
+            onPressed: () => showLogoutDialog(context),
           ),
         ],
       ),
@@ -97,20 +74,57 @@ class _AdminDashboardView extends StatelessWidget {
                         stats['pending_review'].toString(),
                         Colors.orange,
                       ),
-                      const SizedBox(width: 12),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
                       _buildMetricCard(
                         'Escalated',
                         stats['escalated'].toString(),
                         Colors.red,
                       ),
+                      const SizedBox(width: 12),
+                      _buildMetricCard(
+                        'Avg Resolution',
+                        '${stats['avg_resolution_hours'] ?? '0.0'}h',
+                        Colors.purple,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 32),
                   const Text(
-                    'Quick Actions',
+                    'Ticket Queues',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+                  _buildAdminActionCard(
+                    context,
+                    'Pending Review',
+                    Icons.rate_review,
+                    'Tickets awaiting your approval',
+                    () => context.push('/admin/tickets?filter=pending_review'),
+                  ),
+                  _buildAdminActionCard(
+                    context,
+                    'Escalated Tickets',
+                    Icons.warning_amber,
+                    'SLA breached — action required',
+                    () => context.push('/admin/tickets?filter=escalated'),
+                  ),
+                  _buildAdminActionCard(
+                    context,
+                    'All Tickets',
+                    Icons.list_alt,
+                    'Filterable list of every ticket',
+                    () => context.push('/admin/tickets'),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Management',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
                   _buildAdminActionCard(
                     context,
                     'Employee Management',

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'bloc/auth_bloc.dart';
+import '../../../core/app_snackbar.dart';
+import '../../../core/loading_button.dart';
 
 class LoginScreen extends StatefulWidget {
   final String role;
@@ -14,6 +16,14 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,9 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
       body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthError) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(state.message)));
+            AppSnackBar.error(context, state.message);
           } else if (state is AuthAuthenticated) {
             if (state.user.role == 'client') {
               context.go('/client');
@@ -39,6 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         },
         builder: (context, state) {
+          final isLoading = state is AuthLoading;
           return SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
@@ -53,58 +62,69 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'Sign in to your account as $displayRole',
-                    style: TextStyle(color: Colors.grey),
+                    style: const TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 48),
                   TextField(
                     controller: _emailController,
+                    enabled: !isLoading,
                     decoration: const InputDecoration(
                       labelText: 'Email',
                       prefixIcon: Icon(Icons.email_outlined),
                     ),
                     keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _passwordController,
-                    decoration: const InputDecoration(
+                    enabled: !isLoading,
+                    obscureText: _obscurePassword,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _submit(context),
+                    decoration: InputDecoration(
                       labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock_outline),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: Colors.grey,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
+                      ),
                     ),
-                    obscureText: true,
                   ),
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () => context.push('/forgot-password'),
+                      onPressed: isLoading
+                          ? null
+                          : () => context.push('/forgot-password'),
                       child: const Text('Forgot Password?'),
                     ),
                   ),
                   const SizedBox(height: 24),
-                  if (state is AuthLoading)
-                    const Center(child: CircularProgressIndicator())
-                  else
-                    ElevatedButton(
-                      onPressed: () {
-                        context.read<AuthBloc>().add(
-                          AuthLoginRequested(
-                            widget.role,
-                            _emailController.text,
-                            _passwordController.text,
-                          ),
-                        );
-                      },
-                      child: const Text('Login'),
-                    ),
+                  LoadingButton(
+                    isLoading: isLoading,
+                    label: 'Login',
+                    icon: Icons.login,
+                    onPressed: () => _submit(context),
+                  ),
                   const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Text("Don't have an account?"),
                       TextButton(
-                        onPressed: () =>
-                            context.push('/register?role=${widget.role}'),
+                        onPressed: isLoading
+                            ? null
+                            : () =>
+                                  context.push('/register?role=${widget.role}'),
                         child: const Text('Register'),
                       ),
                     ],
@@ -118,19 +138,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 16),
                   if (widget.role != 'client')
                     OutlinedButton(
-                      onPressed: () => context.go('/login?role=client'),
+                      onPressed: isLoading
+                          ? null
+                          : () => context.go('/login?role=client'),
                       child: const Text('Login as Client'),
                     ),
                   if (widget.role != 'client') const SizedBox(height: 8),
                   if (widget.role != 'employee')
                     OutlinedButton(
-                      onPressed: () => context.go('/login?role=employee'),
+                      onPressed: isLoading
+                          ? null
+                          : () => context.go('/login?role=employee'),
                       child: const Text('Login as Employee'),
                     ),
                   if (widget.role != 'employee') const SizedBox(height: 8),
                   if (widget.role != 'admin')
                     OutlinedButton(
-                      onPressed: () => context.go('/login?role=admin'),
+                      onPressed: isLoading
+                          ? null
+                          : () => context.go('/login?role=admin'),
                       child: const Text('Login as Admin'),
                     ),
                 ],
@@ -139,6 +165,20 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         },
       ),
+    );
+  }
+
+  void _submit(BuildContext context) {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      AppSnackBar.warning(context, 'Please enter your email and password.');
+      return;
+    }
+
+    context.read<AuthBloc>().add(
+      AuthLoginRequested(widget.role, email, password),
     );
   }
 }

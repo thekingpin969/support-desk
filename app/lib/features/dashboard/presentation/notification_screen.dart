@@ -104,7 +104,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                     Icon(
                       Icons.notifications_none,
                       size: 64,
-                      color: AppColors.textSecondary.withOpacity(0.5),
+                      color: AppColors.textSecondary.withValues(alpha: 0.5),
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -159,7 +159,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           leading: CircleAvatar(
                             backgroundColor: notification.isRead
                                 ? AppColors.background
-                                : AppColors.primary.withOpacity(0.1),
+                                : AppColors.primary.withValues(alpha: 0.1),
                             child: Icon(
                               Icons.notifications,
                               color: notification.isRead
