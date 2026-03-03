@@ -176,7 +176,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
 
                   // ── Priority ──────────────────────────────────────────
                   DropdownButtonFormField<String>(
-                    value: _priority,
+                    initialValue: _priority,
                     decoration: const InputDecoration(
                       labelText: 'Priority',
                       prefixIcon: Icon(Icons.flag_outlined),
@@ -201,7 +201,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                     const Center(child: CircularProgressIndicator())
                   else
                     DropdownButtonFormField<String>(
-                      value: _categoryId,
+                      initialValue: _categoryId,
                       decoration: const InputDecoration(
                         labelText: 'Category',
                         prefixIcon: Icon(Icons.category_outlined),
@@ -240,7 +240,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: _selectedImages.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
                         itemBuilder: (context, index) {
                           final file = _selectedImages[index];
                           return Stack(

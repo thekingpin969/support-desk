@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/constants.dart';
+import '../../../core/loading_button.dart';
 import 'bloc/tickets_bloc.dart';
 import '../domain/ticket_model.dart';
 
@@ -193,24 +194,38 @@ class _EmployeeResponseSheetState extends State<EmployeeResponseSheet> {
               children: [
                 // Save Draft
                 Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _submit(saveDraft: true),
-                    child: const Text('Save Draft'),
+                  child: BlocBuilder<TicketsBloc, TicketsState>(
+                    builder: (context, state) {
+                      final isLoading = state is TicketsLoading;
+                      return LoadingButton(
+                        isLoading: isLoading,
+                        label: 'Save Draft',
+                        backgroundColor: AppColors.surface,
+                        foregroundColor: AppColors.primary,
+                        onPressed: isLoading
+                            ? null
+                            : () => _submit(saveDraft: true),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
                 // Submit for Review
                 Expanded(
                   flex: 2,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                    ),
-                    onPressed: () => _submit(saveDraft: false),
-                    child: const Text(
-                      'Submit for Review',
-                      style: TextStyle(color: Colors.white),
-                    ),
+                  child: BlocBuilder<TicketsBloc, TicketsState>(
+                    builder: (context, state) {
+                      final isLoading = state is TicketsLoading;
+                      return LoadingButton(
+                        isLoading: isLoading,
+                        label: 'Submit for Review',
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        onPressed: isLoading
+                            ? null
+                            : () => _submit(saveDraft: false),
+                      );
+                    },
                   ),
                 ),
               ],

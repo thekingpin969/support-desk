@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/constants.dart';
 import '../../../core/di.dart';
+import '../../../core/app_snackbar.dart';
 import '../../tickets/domain/ticket_model.dart';
 import '../../tickets/presentation/bloc/tickets_bloc.dart';
 
@@ -127,10 +128,34 @@ class _AdminTicketsViewState extends State<_AdminTicketsView>
                 if (state is TicketsLoading) {
                   return const Center(child: CircularProgressIndicator());
                 } else if (state is TicketsError) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    AppSnackBar.error(context, state.message);
+                  });
                   return Center(
-                    child: Text(
-                      state.message,
-                      style: const TextStyle(color: Colors.red),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: Colors.redAccent,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Failed to load tickets',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: AppColors.textMain,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              context.read<TicketsBloc>().add(LoadTickets()),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                        ),
+                      ],
                     ),
                   );
                 } else if (state is TicketsLoaded) {

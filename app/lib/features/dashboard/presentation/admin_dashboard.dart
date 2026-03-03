@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'bloc/admin_bloc.dart';
 import '../../../core/di.dart';
+import '../../../core/app_snackbar.dart';
 import '../../../core/logout_dialog.dart';
 
 class AdminDashboard extends StatelessWidget {
@@ -37,15 +38,34 @@ class _AdminDashboardView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<AdminBloc, AdminState>(
+      body: BlocConsumer<AdminBloc, AdminState>(
+        listener: (context, state) {
+          if (state is AdminError) {
+            AppSnackBar.error(context, state.message);
+          }
+        },
         builder: (context, state) {
           if (state is AdminLoading) {
             return const Center(child: CircularProgressIndicator());
           } else if (state is AdminError) {
             return Center(
-              child: Text(
-                state.message,
-                style: const TextStyle(color: Colors.red),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text(
+                    state.message,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () =>
+                        context.read<AdminBloc>().add(LoadAnalytics()),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
               ),
             );
           } else if (state is AdminLoaded) {

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/constants.dart';
 import '../../../core/di.dart';
+import '../../../core/app_snackbar.dart';
 import '../../auth/presentation/bloc/auth_bloc.dart';
 import '../domain/ticket_model.dart';
 import 'bloc/tickets_bloc.dart';
@@ -21,8 +22,30 @@ class MyTicketsScreen extends StatelessWidget {
   }
 }
 
-class _MyTicketsView extends StatelessWidget {
+class _MyTicketsView extends StatefulWidget {
   const _MyTicketsView();
+
+  @override
+  State<_MyTicketsView> createState() => _MyTicketsViewState();
+}
+
+class _MyTicketsViewState extends State<_MyTicketsView> {
+  String _sortOption = 'Date (Newest)';
+
+  int _priorityValue(String priority) {
+    switch (priority.toUpperCase()) {
+      case 'CRITICAL':
+        return 4;
+      case 'HIGH':
+        return 3;
+      case 'MEDIUM':
+        return 2;
+      case 'LOW':
+        return 1;
+      default:
+        return 0;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,18 +63,66 @@ class _MyTicketsView extends StatelessWidget {
         backgroundColor: AppColors.surface,
         elevation: 0,
         centerTitle: false,
-        automaticallyImplyLeading:
-            false, // Don't show back arrow if we are in nav bar
+        automaticallyImplyLeading: false,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.sort, color: AppColors.textMain),
+            onSelected: (String result) {
+              setState(() {
+                _sortOption = result;
+              });
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'Date (Newest)',
+                child: Text('Date (Newest)'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'Date (Oldest)',
+                child: Text('Date (Oldest)'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'Priority (High to Low)',
+                child: Text('Priority (High to Low)'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'Priority (Low to High)',
+                child: Text('Priority (Low to High)'),
+              ),
+            ],
+          ),
+        ],
       ),
       body: BlocBuilder<TicketsBloc, TicketsState>(
         builder: (context, state) {
           if (state is TicketsLoading) {
             return const Center(child: CircularProgressIndicator());
           } else if (state is TicketsError) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              AppSnackBar.error(context, state.message);
+            });
             return Center(
-              child: Text(
-                state.message,
-                style: const TextStyle(color: Colors.red),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: Colors.redAccent,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Failed to load tickets',
+                    style: TextStyle(fontSize: 16, color: AppColors.textMain),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        context.read<TicketsBloc>().add(LoadTickets()),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
               ),
             );
           } else if (state is TicketsLoaded) {
@@ -64,15 +135,36 @@ class _MyTicketsView extends StatelessWidget {
                 ),
               );
             }
+
+            final sortedTickets = List<TicketModel>.from(tickets);
+            sortedTickets.sort((a, b) {
+              switch (_sortOption) {
+                case 'Date (Newest)':
+                  return b.createdAt.compareTo(a.createdAt);
+                case 'Date (Oldest)':
+                  return a.createdAt.compareTo(b.createdAt);
+                case 'Priority (High to Low)':
+                  return _priorityValue(
+                    b.priority,
+                  ).compareTo(_priorityValue(a.priority));
+                case 'Priority (Low to High)':
+                  return _priorityValue(
+                    a.priority,
+                  ).compareTo(_priorityValue(b.priority));
+                default:
+                  return 0;
+              }
+            });
+
             return RefreshIndicator(
               onRefresh: () async =>
                   context.read<TicketsBloc>().add(LoadTickets()),
               child: ListView.builder(
                 padding: const EdgeInsets.all(24.0),
                 physics: const AlwaysScrollableScrollPhysics(),
-                itemCount: tickets.length,
+                itemCount: sortedTickets.length,
                 itemBuilder: (context, index) {
-                  return _TicketCard(ticket: tickets[index]);
+                  return _TicketCard(ticket: sortedTickets[index]);
                 },
               ),
             );
@@ -117,11 +209,7 @@ class _MyTicketsView extends StatelessWidget {
             false,
             onTap: () => context.go('/client'),
           ),
-          _buildNavItem(
-            Icons.confirmation_number_outlined,
-            'My Tickets',
-            true, // isSelected is true here
-          ),
+          _buildNavItem(Icons.confirmation_number_outlined, 'My Tickets', true),
           _buildNavItem(
             Icons.notifications_none_outlined,
             'Alerts',
@@ -192,25 +280,29 @@ class _MyTicketsView extends StatelessWidget {
 }
 
 class _TicketCard extends StatelessWidget {
-  final dynamic ticket;
+  final TicketModel ticket;
   const _TicketCard({required this.ticket});
 
   @override
   Widget build(BuildContext context) {
     Color indicatorColor;
-    if (ticket.priority == 'CRITICAL') {
-      indicatorColor = Colors.red;
-    } else if (ticket.priority == 'HIGH') {
-      indicatorColor = Colors.orange;
-    } else if (ticket.priority == 'MEDIUM') {
-      indicatorColor = Colors.blue;
-    } else {
-      indicatorColor = Colors.grey;
+    switch (ticket.priority.toUpperCase()) {
+      case 'CRITICAL':
+        indicatorColor = Colors.red;
+        break;
+      case 'HIGH':
+        indicatorColor = Colors.orange;
+        break;
+      case 'MEDIUM':
+        indicatorColor = Colors.blue;
+        break;
+      default:
+        indicatorColor = Colors.grey;
     }
 
     return GestureDetector(
       onTap: () {
-        context.push('/ticket-detail', extra: ticket as TicketModel);
+        context.push('/ticket-detail', extra: ticket);
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),

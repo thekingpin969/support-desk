@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/constants.dart';
 import '../../../core/di.dart';
 import '../../auth/presentation/bloc/auth_bloc.dart';
 import '../../dashboard/data/admin_repository.dart';
+import '../../../core/app_snackbar.dart';
+import '../../../core/loading_button.dart';
 
 import '../data/ticket_repository.dart';
 import '../domain/ticket_model.dart';
@@ -45,11 +46,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     ) {
       if (t != null) {
         debugPrint(
-          'TICKET DETAIL LOADED: \${t.ticketNumber} with \${t.responses.length} responses',
+          'TICKET DETAIL LOADED: ${t.ticketNumber} with ${t.responses.length} responses',
         );
-        for (var r in t.responses) {
-          debugPrint('Response: \${r.content} - \${r.type}');
-        }
       } else {
         debugPrint('TICKET DETAIL LOAD FAILED: fetchTicketById returned null');
       }
@@ -124,27 +122,39 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                   ),
               ],
             ),
-            body: Builder(
-              builder: (innerCtx) => SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildTicketHeader(ticket),
-                    const SizedBox(height: 24),
-                    _buildClientInfo(innerCtx, ticket),
-                    if (ticket.images.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      _buildImages(innerCtx, ticket),
-                    ],
-                    const SizedBox(height: 24),
-                    _buildResponses(innerCtx, ticket, isLoading),
-                    const SizedBox(height: 24),
-                    _buildAuditTrail(),
-                    _buildRoleBasedActions(innerCtx, ticket),
-                  ],
-                ),
-              ),
+            body: BlocConsumer<TicketsBloc, TicketsState>(
+              listener: (context, state) {
+                if (state is TicketsError) {
+                  AppSnackBar.error(context, state.message);
+                } else if (state is TicketsLoaded) {
+                  AppSnackBar.success(context, 'Action completed successfully');
+                  _refresh(); // Refresh ticket data after an action
+                }
+              },
+              builder: (context, state) {
+                return Builder(
+                  builder: (innerCtx) => SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildTicketHeader(ticket),
+                        const SizedBox(height: 24),
+                        _buildClientInfo(innerCtx, ticket),
+                        if (ticket.images.isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          _buildImages(innerCtx, ticket),
+                        ],
+                        const SizedBox(height: 24),
+                        _buildResponses(innerCtx, ticket, isLoading),
+                        const SizedBox(height: 24),
+                        _buildAuditTrail(),
+                        _buildRoleBasedActions(innerCtx, ticket),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
           );
         },
@@ -564,20 +574,26 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                   icon: const Icon(Icons.edit_note, size: 16),
                   label: const Text('Ask for Revision'),
                 ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                  ),
-                  onPressed: () {
-                    context.read<TicketsBloc>().add(
-                      ApproveResponse(ticketId, response.id),
+                BlocBuilder<TicketsBloc, TicketsState>(
+                  builder: (context, state) {
+                    final isLoading = state is TicketsLoading;
+                    return Expanded(
+                      child: LoadingButton(
+                        isLoading: isLoading,
+                        label: 'Approve & Send',
+                        icon: Icons.check,
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        onPressed: isLoading
+                            ? null
+                            : () {
+                                context.read<TicketsBloc>().add(
+                                  ApproveResponse(ticketId, response.id),
+                                );
+                              },
+                      ),
                     );
                   },
-                  icon: const Icon(Icons.check, size: 16, color: Colors.white),
-                  label: const Text(
-                    'Approve & Send',
-                    style: TextStyle(color: Colors.white),
-                  ),
                 ),
               ],
             ),
@@ -787,16 +803,24 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                   label: const Text('Rate Response'),
                 ),
                 const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    context.read<TicketsBloc>().add(ReopenTicket(ticket.id));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Ticket Reopened')),
+                BlocBuilder<TicketsBloc, TicketsState>(
+                  builder: (context, state) {
+                    final isLoading = state is TicketsLoading;
+                    return LoadingButton(
+                      isLoading: isLoading,
+                      onPressed: isLoading
+                          ? null
+                          : () {
+                              context.read<TicketsBloc>().add(
+                                ReopenTicket(ticket.id),
+                              );
+                            },
+                      icon: Icons.refresh,
+                      label: 'Reopen Ticket',
+                      backgroundColor: AppColors.surface,
+                      foregroundColor: AppColors.primary,
                     );
-                    context.pop();
                   },
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Reopen Ticket'),
                 ),
               ],
             );
@@ -877,16 +901,24 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 24),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () {
-                  context.read<TicketsBloc>().add(EscalateTicket(ticket.id));
+              BlocBuilder<TicketsBloc, TicketsState>(
+                builder: (context, state) {
+                  final isLoading = state is TicketsLoading;
+                  return LoadingButton(
+                    isLoading: isLoading,
+                    label: 'Escalate & Notify',
+                    icon: Icons.warning,
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    onPressed: isLoading
+                        ? null
+                        : () {
+                            context.read<TicketsBloc>().add(
+                              EscalateTicket(ticket.id),
+                            );
+                          },
+                  );
                 },
-                icon: const Icon(Icons.warning, color: Colors.white),
-                label: const Text(
-                  'Escalate & Notify',
-                  style: TextStyle(color: Colors.white),
-                ),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
@@ -1060,7 +1092,7 @@ class _FullscreenImageViewer extends StatelessWidget {
             loadingBuilder: (_, child, progress) => progress == null
                 ? child
                 : const Center(child: CircularProgressIndicator()),
-            errorBuilder: (_, __, _e) =>
+            errorBuilder: (_, _, error) =>
                 const Icon(Icons.broken_image, color: Colors.white, size: 64),
           ),
         ),

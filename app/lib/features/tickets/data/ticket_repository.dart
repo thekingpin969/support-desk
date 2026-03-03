@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/api_client.dart';
 import '../../../core/constants.dart';
 import '../domain/ticket_model.dart';
@@ -108,13 +109,13 @@ class TicketRepository {
       final response = await apiClient.dio.get(
         '${ApiConstants.tickets}/$ticketId',
       );
-      print(
+      debugPrint(
         'DEBUG API: ${response.data}',
       ); // Let's log raw response to catch the structure
       return TicketModel.fromJson(response.data['ticket']);
     } catch (e, stack) {
       // Catch DioException and any JSON parsing errors
-      print('Error fetching ticket by ID: $e\n$stack');
+      debugPrint('Error fetching ticket by ID: $e\n$stack');
       return null;
     }
   }

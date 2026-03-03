@@ -5,6 +5,7 @@ import '../../auth/presentation/bloc/auth_bloc.dart';
 import '../../tickets/presentation/bloc/tickets_bloc.dart';
 import '../../../core/constants.dart';
 import '../../../core/di.dart';
+import '../../../core/app_snackbar.dart';
 import '../../../core/logout_dialog.dart';
 import 'package:intl/intl.dart';
 import '../../tickets/domain/ticket_model.dart';
@@ -21,8 +22,15 @@ class ClientDashboard extends StatelessWidget {
   }
 }
 
-class _ClientDashboardView extends StatelessWidget {
+class _ClientDashboardView extends StatefulWidget {
   const _ClientDashboardView();
+
+  @override
+  State<_ClientDashboardView> createState() => _ClientDashboardViewState();
+}
+
+class _ClientDashboardViewState extends State<_ClientDashboardView> {
+  String _searchQuery = '';
 
   @override
   Widget build(BuildContext context) {
@@ -33,15 +41,38 @@ class _ClientDashboardView extends StatelessWidget {
           children: [
             _buildHeader(context),
             Expanded(
-              child: BlocBuilder<TicketsBloc, TicketsState>(
+              child: BlocConsumer<TicketsBloc, TicketsState>(
+                listener: (context, state) {
+                  if (state is TicketsError) {
+                    AppSnackBar.error(context, state.message);
+                  }
+                },
                 builder: (context, state) {
                   if (state is TicketsLoading) {
                     return const Center(child: CircularProgressIndicator());
                   } else if (state is TicketsError) {
                     return Center(
-                      child: Text(
-                        state.message,
-                        style: const TextStyle(color: Colors.red),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            size: 48,
+                            color: Colors.red,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            state.message,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: () =>
+                                context.read<TicketsBloc>().add(LoadTickets()),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                          ),
+                        ],
                       ),
                     );
                   } else if (state is TicketsLoaded) {
@@ -161,9 +192,14 @@ class _ClientDashboardView extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: TextField(
-                  decoration: InputDecoration(
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                    });
+                  },
+                  decoration: const InputDecoration(
                     hintText: 'Search tickets...',
-                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                    prefixIcon: Icon(Icons.search, color: Colors.grey),
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
@@ -290,7 +326,22 @@ class _ClientDashboardView extends StatelessWidget {
   }
 
   Widget _buildActiveTicketsList(List tickets) {
-    if (tickets.isEmpty) return const Center(child: Text("No tickets found."));
+    List filteredTickets = tickets;
+    if (_searchQuery.isNotEmpty) {
+      filteredTickets = tickets.where((ticket) {
+        final titleMatch = ticket.title.toLowerCase().contains(
+          _searchQuery.toLowerCase(),
+        );
+        final numberMatch = ticket.ticketNumber.toLowerCase().contains(
+          _searchQuery.toLowerCase(),
+        );
+        return titleMatch || numberMatch;
+      }).toList();
+    }
+
+    if (filteredTickets.isEmpty) {
+      return const Center(child: Text("No tickets found."));
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -303,7 +354,9 @@ class _ClientDashboardView extends StatelessWidget {
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
             TextButton(
-              onPressed: () {},
+              onPressed: () {
+                context.go('/my-tickets');
+              },
               child: const Text(
                 'View All',
                 style: TextStyle(fontSize: 12, color: AppColors.primary),
@@ -312,7 +365,7 @@ class _ClientDashboardView extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        ...tickets.map((t) => _TicketCard(ticket: t)),
+        ...filteredTickets.map((t) => _TicketCard(ticket: t)),
       ],
     );
   }

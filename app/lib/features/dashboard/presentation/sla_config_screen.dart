@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/di.dart';
+import '../../../core/app_snackbar.dart';
+import '../../../core/loading_button.dart';
 import '../data/admin_repository.dart';
 
 class SlaConfigScreen extends StatefulWidget {
@@ -12,6 +14,7 @@ class SlaConfigScreen extends StatefulWidget {
 class _SlaConfigScreenState extends State<SlaConfigScreen> {
   List<dynamic> _configs = [];
   bool _isLoading = true;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -29,15 +32,14 @@ class _SlaConfigScreenState extends State<SlaConfigScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        AppSnackBar.error(context, e.toString());
         setState(() => _isLoading = false);
       }
     }
   }
 
   void _saveConfigs() async {
+    setState(() => _isSaving = true);
     try {
       final List<Map<String, dynamic>> toSave = _configs
           .map(
@@ -51,15 +53,15 @@ class _SlaConfigScreenState extends State<SlaConfigScreen> {
 
       await sl<AdminRepository>().updateSlaConfigs(toSave);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Saved successfully!')));
+        AppSnackBar.success(context, 'Saved successfully!');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        AppSnackBar.error(context, e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
       }
     }
   }
@@ -132,7 +134,15 @@ class _SlaConfigScreenState extends State<SlaConfigScreen> {
       appBar: AppBar(
         title: const Text('SLA Configuration'),
         actions: [
-          IconButton(icon: const Icon(Icons.save), onPressed: _saveConfigs),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: LoadingButton(
+              isLoading: _isSaving,
+              label: 'Save',
+              icon: Icons.save,
+              onPressed: _saveConfigs,
+            ),
+          ),
         ],
       ),
       body: _isLoading

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/di.dart';
+import '../../../core/app_snackbar.dart';
+import '../../../core/loading_button.dart';
 import '../data/admin_repository.dart';
 
 class CategoryManagementScreen extends StatefulWidget {
@@ -30,9 +32,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        AppSnackBar.error(context, e.toString());
         setState(() => _isLoading = false);
       }
     }
@@ -43,36 +43,49 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Category'),
-        content: TextField(
-          controller: nameCtrl,
-          decoration: const InputDecoration(labelText: 'Category Name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+      builder: (context) {
+        bool isSaving = false;
+        return StatefulBuilder(
+          builder: (context, setStateBuilder) => AlertDialog(
+            title: const Text('Add Category'),
+            content: TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Category Name'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              LoadingButton(
+                isLoading: isSaving,
+                label: 'Add',
+                onPressed: () async {
+                  if (nameCtrl.text.isEmpty) return;
+                  setStateBuilder(() => isSaving = true);
+                  try {
+                    await sl<AdminRepository>().createCategory(nameCtrl.text);
+                    if (!context.mounted) return;
+                    AppSnackBar.success(
+                      context,
+                      'Category created successfully',
+                    );
+                    Navigator.pop(context);
+                    _loadCategories();
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    AppSnackBar.error(context, e.toString());
+                  } finally {
+                    if (context.mounted) {
+                      setStateBuilder(() => isSaving = false);
+                    }
+                  }
+                },
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                if (nameCtrl.text.isEmpty) return;
-                await sl<AdminRepository>().createCategory(nameCtrl.text);
-                if (!context.mounted) return;
-                Navigator.pop(context);
-                _loadCategories();
-              } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(e.toString())));
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -82,51 +95,62 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setStateBuilder) => AlertDialog(
-          title: const Text('Edit Category'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Category Name'),
+      builder: (context) {
+        bool isSaving = false;
+        return StatefulBuilder(
+          builder: (context, setStateBuilder) => AlertDialog(
+            title: const Text('Edit Category'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Category Name'),
+                ),
+                SwitchListTile(
+                  title: const Text('Active'),
+                  value: isActive,
+                  onChanged: (val) => setStateBuilder(() => isActive = val),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
               ),
-              SwitchListTile(
-                title: const Text('Active'),
-                value: isActive,
-                onChanged: (val) => setStateBuilder(() => isActive = val),
+              LoadingButton(
+                isLoading: isSaving,
+                label: 'Save',
+                onPressed: () async {
+                  setStateBuilder(() => isSaving = true);
+                  try {
+                    await sl<AdminRepository>().updateCategory(
+                      category['id'],
+                      nameCtrl.text,
+                      isActive,
+                    );
+                    if (!context.mounted) return;
+                    AppSnackBar.success(
+                      context,
+                      'Category updated successfully',
+                    );
+                    Navigator.pop(context);
+                    _loadCategories();
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    AppSnackBar.error(context, e.toString());
+                  } finally {
+                    if (context.mounted) {
+                      setStateBuilder(() => isSaving = false);
+                    }
+                  }
+                },
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  await sl<AdminRepository>().updateCategory(
-                    category['id'],
-                    nameCtrl.text,
-                    isActive,
-                  );
-                  if (!context.mounted) return;
-                  Navigator.pop(context);
-                  _loadCategories();
-                } catch (e) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(e.toString())));
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
   }
 

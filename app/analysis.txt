@@ -1,0 +1,22 @@
+Analyzing app...                                                
+
+   info - Statements in an if should be enclosed in a block - lib\features\dashboard\presentation\client_dashboard.dart:343:7 - curly_braces_in_flow_control_structures
+   info - Unnecessary use of multiple underscores - lib\features\tickets\presentation\create_ticket_screen.dart:243:47 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\tickets\presentation\ticket_detail_screen.dart:1095:31 - unnecessary_underscores
+warning - The value of the local variable 't' isn't used - test_parse.dart:61:17 - unused_local_variable
+   info - Don't invoke 'print' in production code - test_parse.dart:62:5 - avoid_print
+warning - The stack trace variable 'stack' isn't used and can be removed - test_parse.dart:63:15 - unused_catch_stack
+   info - Don't invoke 'print' in production code - test_parse.dart:64:5 - avoid_print
+   info - Don't invoke 'print' in production code - test_standalone.dart:113:7 - avoid_print
+   info - Don't invoke 'print' in production code - test_standalone.dart:114:7 - avoid_print
+warning - The value of the local variable 't' isn't used - test_standalone.dart:187:17 - unused_local_variable
+   info - Don't invoke 'print' in production code - test_standalone.dart:188:5 - avoid_print
+warning - The stack trace variable 'stack' isn't used and can be removed - test_standalone.dart:189:15 - unused_catch_stack
+   info - Don't invoke 'print' in production code - test_standalone.dart:190:5 - avoid_print
+   info - Don't invoke 'print' in production code - test_standalone2.dart:113:7 - avoid_print
+   info - Don't invoke 'print' in production code - test_standalone2.dart:114:7 - avoid_print
+warning - The value of the local variable 't' isn't used - test_standalone2.dart:234:17 - unused_local_variable
+   info - Don't invoke 'print' in production code - test_standalone2.dart:235:5 - avoid_print
+warning - The stack trace variable 'stack' isn't used and can be removed - test_standalone2.dart:236:15 - unused_catch_stack
+   info - Don't invoke 'print' in production code - test_standalone2.dart:237:5 - avoid_print
+

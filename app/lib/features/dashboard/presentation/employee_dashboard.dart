@@ -7,6 +7,7 @@ import '../../auth/presentation/bloc/auth_bloc.dart';
 import '../../tickets/domain/ticket_model.dart';
 import '../../../core/constants.dart';
 import '../../../core/di.dart';
+import '../../../core/app_snackbar.dart';
 import '../../../core/logout_dialog.dart';
 import '../data/employee_repository.dart';
 
@@ -55,7 +56,10 @@ class _EmployeeDashboardViewState extends State<_EmployeeDashboardView>
       final data = await sl<EmployeeRepository>().fetchDashboard();
       if (mounted) setState(() => _data = data);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) {
+        setState(() => _error = e.toString());
+        AppSnackBar.error(context, e.toString());
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -77,14 +81,21 @@ class _EmployeeDashboardViewState extends State<_EmployeeDashboardView>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: AppColors.danger,
+                      ),
+                      const SizedBox(height: 16),
                       Text(
                         _error!,
                         style: const TextStyle(color: AppColors.danger),
                       ),
                       const SizedBox(height: 16),
-                      ElevatedButton(
+                      ElevatedButton.icon(
                         onPressed: _loadDashboard,
-                        child: const Text('Retry'),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
                       ),
                     ],
                   ),

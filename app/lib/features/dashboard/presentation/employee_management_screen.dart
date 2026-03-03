@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/di.dart';
+import '../../../core/app_snackbar.dart';
+import '../../../core/loading_button.dart';
 import '../data/admin_repository.dart';
 
 class EmployeeManagementScreen extends StatefulWidget {
@@ -31,9 +33,7 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        AppSnackBar.error(context, e.toString());
         setState(() => _isLoading = false);
       }
     }
@@ -47,61 +47,81 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Employee'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: emailCtrl,
-                decoration: const InputDecoration(labelText: 'Email'),
+      builder: (context) {
+        bool isSaving = false;
+        return StatefulBuilder(
+          builder: (context, setStateBuilder) => AlertDialog(
+            title: const Text('Add Employee'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: emailCtrl,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                  ),
+                  TextField(
+                    controller: passCtrl,
+                    decoration: const InputDecoration(labelText: 'Password'),
+                    obscureText: true,
+                  ),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Full Name'),
+                  ),
+                  TextField(
+                    controller: deptCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Department (optional)',
+                    ),
+                  ),
+                ],
               ),
-              TextField(
-                controller: passCtrl,
-                decoration: const InputDecoration(labelText: 'Password'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
               ),
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Full Name'),
-              ),
-              TextField(
-                controller: deptCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Department (optional)',
-                ),
+              LoadingButton(
+                isLoading: isSaving,
+                label: 'Add',
+                onPressed: () async {
+                  if (emailCtrl.text.isEmpty ||
+                      passCtrl.text.isEmpty ||
+                      nameCtrl.text.isEmpty) {
+                    AppSnackBar.warning(
+                      context,
+                      'Please fill in email, password, and name.',
+                    );
+                    return;
+                  }
+                  setStateBuilder(() => isSaving = true);
+                  try {
+                    await sl<AdminRepository>().createEmployee({
+                      'email': emailCtrl.text,
+                      'password': passCtrl.text,
+                      'full_name': nameCtrl.text,
+                      if (deptCtrl.text.isNotEmpty) 'department': deptCtrl.text,
+                    });
+                    if (!context.mounted) return;
+                    AppSnackBar.success(context, 'Employee added successfully');
+                    Navigator.pop(context);
+                    _loadEmployees();
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    AppSnackBar.error(context, e.toString());
+                  } finally {
+                    if (context.mounted) {
+                      setStateBuilder(() => isSaving = false);
+                    }
+                  }
+                },
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await sl<AdminRepository>().createEmployee({
-                  'email': emailCtrl.text,
-                  'password': passCtrl.text,
-                  'full_name': nameCtrl.text,
-                  if (deptCtrl.text.isNotEmpty) 'department': deptCtrl.text,
-                });
-                if (!context.mounted) return;
-                Navigator.pop(context);
-                _loadEmployees();
-              } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(e.toString())));
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -116,58 +136,71 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setStateBuilder) => AlertDialog(
-          title: Text('Edit ${employee['full_name']}'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: deptCtrl,
-                  decoration: const InputDecoration(labelText: 'Department'),
-                ),
-                TextField(
-                  controller: maxCapCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Max Capacity'),
-                ),
-                SwitchListTile(
-                  title: const Text('Active'),
-                  value: isActive,
-                  onChanged: (val) => setStateBuilder(() => isActive = val),
-                ),
-              ],
+      builder: (context) {
+        bool isSaving = false;
+        return StatefulBuilder(
+          builder: (context, setStateBuilder) => AlertDialog(
+            title: Text('Edit ${employee['full_name']}'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: deptCtrl,
+                    decoration: const InputDecoration(labelText: 'Department'),
+                  ),
+                  TextField(
+                    controller: maxCapCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Max Capacity',
+                    ),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Active'),
+                    value: isActive,
+                    onChanged: (val) => setStateBuilder(() => isActive = val),
+                  ),
+                ],
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              LoadingButton(
+                isLoading: isSaving,
+                label: 'Save',
+                onPressed: () async {
+                  setStateBuilder(() => isSaving = true);
+                  try {
+                    await sl<AdminRepository>().updateEmployee(employee['id'], {
+                      'department': deptCtrl.text,
+                      'max_capacity': int.tryParse(maxCapCtrl.text) ?? 10,
+                      'is_active': isActive,
+                    });
+                    if (!context.mounted) return;
+                    AppSnackBar.success(
+                      context,
+                      'Employee updated successfully',
+                    );
+                    Navigator.pop(context);
+                    _loadEmployees();
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    AppSnackBar.error(context, e.toString());
+                  } finally {
+                    if (context.mounted) {
+                      setStateBuilder(() => isSaving = false);
+                    }
+                  }
+                },
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  await sl<AdminRepository>().updateEmployee(employee['id'], {
-                    'department': deptCtrl.text,
-                    'max_capacity': int.tryParse(maxCapCtrl.text) ?? 10,
-                    'is_active': isActive,
-                  });
-                  if (!context.mounted) return;
-                  Navigator.pop(context);
-                  _loadEmployees();
-                } catch (e) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(e.toString())));
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
   }
 

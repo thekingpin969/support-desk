@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../core/constants.dart';
+import '../../../core/app_snackbar.dart';
 import 'bloc/notification_bloc.dart';
 import 'bloc/notification_event.dart';
 import 'bloc/notification_state.dart';
@@ -67,7 +68,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ),
         ],
       ),
-      body: BlocBuilder<NotificationBloc, NotificationState>(
+      body: BlocConsumer<NotificationBloc, NotificationState>(
+        listener: (context, state) {
+          if (state is NotificationError) {
+            AppSnackBar.error(context, state.message);
+          }
+        },
         builder: (context, state) {
           if (state is NotificationLoading || state is NotificationInitial) {
             return const Center(child: CircularProgressIndicator());
@@ -84,11 +90,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   const SizedBox(height: 16),
                   Text(state.message, textAlign: TextAlign.center),
                   const SizedBox(height: 16),
-                  ElevatedButton(
+                  ElevatedButton.icon(
                     onPressed: () => context.read<NotificationBloc>().add(
                       LoadNotifications(),
                     ),
-                    child: const Text('Retry'),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
                   ),
                 ],
               ),
